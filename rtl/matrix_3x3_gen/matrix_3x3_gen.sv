@@ -1,6 +1,19 @@
 `timescale 1ns/1ps
-//matrix_3x3_gen: two line FIFOs build the 3x3 window of every pixel, tvalid / tuser belong to the window center [4].
-//A beat moves only on a handshake, so tvalid may be discontinuous. The last line is flushed after EOF.
+////////////////////////////////////////////////////////////////////////////
+// Company               :       
+// Engineer              :     
+// Function              :       two line FIFOs build the 3x3 window of every pixel, tvalid / tuser belong to the window center [4].
+//                               A beat moves only on a handshake, so tvalid may be discontinuous. The last line is flushed after EOF.
+// Creat Date            :       2024/5/17 
+// Module Name           :       matrix_3x3_gen
+// Tool Versions         :       modelsim 10.4d
+// Description           :       Matrix_3x3_gen axi_stream interface    
+// Vresion 1.0           :       File Created     
+
+//-------------------- Modification History -----------------------------------
+//2024/5/17            v1.0     :     File Created
+//2026/7/06            v2.0     :     fix bug
+
 module matrix_3x3_gen #(
     parameter PIXEL_WIDTH           = 10  ,//bits per pixel
     parameter PIXEL_TAP_NUM         = 8   ,//pixels per beat
