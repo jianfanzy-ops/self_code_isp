@@ -1,0 +1,30 @@
+﻿[
+    {
+        "Run":  "matrix_tap8",
+        "Top":  "tb_matrix_3x3_gen",
+        "Cases":  3,
+        "Expected":  7,
+        "Result":  "FAIL"
+    },
+    {
+        "Run":  "matrix_tap4",
+        "Top":  "tb_matrix_3x3_gen",
+        "Cases":  3,
+        "Expected":  7,
+        "Result":  "FAIL"
+    },
+    {
+        "Run":  "matrix_tap2",
+        "Top":  "tb_matrix_3x3_gen",
+        "Cases":  3,
+        "Expected":  7,
+        "Result":  "FAIL"
+    },
+    {
+        "Run":  "matrix_tap1",
+        "Top":  "tb_matrix_3x3_gen",
+        "Cases":  3,
+        "Expected":  7,
+        "Result":  "FAIL"
+    }
+]

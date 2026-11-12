@@ -1,0 +1,6 @@
+# simulation by-products
+*.wlf
+*.console
+work/
+work_gui/
+transcript

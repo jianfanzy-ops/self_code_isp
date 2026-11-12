@@ -1,0 +1,591 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>matrix_3x3_gen 仿真完整代码</title><style>body{margin:0;background:#f3f5f7;color:#18212d;font:15px/1.6 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1400px;padding:24px;margin:auto}h1{margin:0 0 8px;font-size:27px}h2{font-size:18px}nav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}a{color:#155ca7}nav a{padding:5px 10px;background:white;border:1px solid #cbd4df;border-radius:6px;text-decoration:none}section{background:white;padding:14px 18px;margin:20px 0;border:1px solid #d7dfe7;border-radius:8px;scroll-margin-top:12px}pre{max-height:560px;overflow:auto;background:#101922;color:#e3eaf2;padding:16px;border-radius:6px;white-space:pre;tab-size:4;font:13px/1.5 Consolas,"Cascadia Code",monospace}pre:focus{outline:2px solid #468fe0}.fail{color:#a32222;font-weight:650}p{margin:8px 0}</style><main><h1>matrix_3x3_gen · 仿真完整代码</h1>
+<p>每个代码框是完整文件，高度固定，可滚轮及横向查看。RTL 未修改。</p>
+<p class="fail">Questa 2024.1：4 组配置中，tvalid 连续的 3 个用例全部 PASS，tvalid 不连续的 4 个用例全部 FAIL（问题已复现）。</p><nav>
+<a href="#f0">tb/tb_matrix_3x3_gen.sv</a>
+<a href="#f1">scripts/run_questa.ps1</a>
+<a href="#f2">scripts/run_questa.bat</a>
+<a href="#f3">scripts/logs/summary.txt</a>
+</nav>
+<section id="f0"><h2>tb/tb_matrix_3x3_gen.sv</h2><p>自检 TB，7 个用例一次跑完</p><pre tabindex="0">`timescale 1ns/1ps
+
+//==============================================================================
+// tb_matrix_3x3_gen: complete self-checking regression, all cases run automatically.
+// Every output beat is compared with the 3x3 windows of the source image;
+// window positions outside the image are not checked (padding is a later stage).
+// Drive with nonblocking assignments and sample only on the rising clock edge.
+//==============================================================================
+module tb_matrix_3x3_gen #(
+    parameter integer  TAP        = 8   ,//pixels per beat, power of 2
+    parameter integer  PIX        = 10  ,//bits per pixel
+    parameter integer  UW         = 4   ,//0:SOF 1:SOL 2:EOL 3:EOF
+    parameter integer  LINE_BEATS = 8   ,//beats per line, at least 4
+    parameter integer  HEIGHT     = 6   ,//lines per frame, at least 3
+    parameter integer  LINE_GAP   = 16  ,//unit: enabled clocks between two lines
+    parameter integer  LINE_MAX   = 2048,//unit: pixels, DUT line buffer depth
+    parameter realtime PIXEL_HALF = 3.5
+);
+
+    `include &quot;define_isp.sv&quot;
+
+    localparam integer DW          = TAP * PIX;
+    localparam integer WIDTH       = TAP * LINE_BEATS;
+    localparam integer FRAME_GAP   = 2*LINE_GAP + LINE_BEATS + 32;//covers the DUT flush of the last line
+    localparam integer FRAME_NUM   = 3;                           //frames per case
+    localparam integer CASE_NUM    = 7;
+    localparam integer WAIT_LIMIT  = 12000;
+    localparam integer PRINT_LIMIT = 6;                           //printed errors per case, the rest is only counted
+    localparam integer ERROR_LIMIT = 4000;
+    localparam integer SEED        = 32&#x27;h4e4f5609;
+    //tvalid inside a line
+    localparam integer GAP_NONE    = 0;                           //continuous
+    localparam integer GAP_ONE     = 1;                           //one idle clock before beat gap_beat of every line
+    localparam integer GAP_RANDOM  = 2;                           //0..3 idle clocks before every beat
+
+    logic                                clk                     = 0;
+    logic                                rst_n                   = 0;
+    logic                                s_valid                 = 0;
+    logic                                s_ready                 ;
+    logic         [TAP-1:0][PIX-1:0]     s_data                  = 0;
+    logic         [UW-1:0]               s_user                  = 0;
+    logic                                m_ready                 = 0;
+    logic                                m_valid                 ;
+    logic         [TAP-1:0][8:0][PIX-1:0] m_data                 ;
+    logic         [UW-1:0]               m_user                  ;
+    logic         [15:0]                 width_cfg               = WIDTH;
+    logic         [15:0]                 height_cfg              = HEIGHT;
+    typedef struct packed {
+        logic         [TAP-1:0][8:0][PIX-1:0] data      ;
+        logic         [TAP-1:0][8:0]          mask      ;//1: inside the image, compared
+        logic         [UW-1:0]                user_bits ;
+        logic         [15:0]                  frame_id  ;
+        logic         [15:0]                  line_id   ;
+        logic         [15:0]                  beat_id   ;
+    } expected_t;
+    expected_t expected[$];
+    integer                              errors                  = 0;
+    integer                              cycles                  = 0;
+    integer                              sent                    = 0;
+    integer                              received                = 0;
+    integer                              gaps                    = 0;
+    integer                              case_start_errors       = 0;
+    integer                              case_errors[CASE_NUM]   ;
+    integer                              case_sent[CASE_NUM]     ;
+    integer                              case_received[CASE_NUM] ;
+    integer                              case_gaps[CASE_NUM]     ;
+    integer                              case_win_bad[CASE_NUM][9];//wrong positions per window index
+    bit                                  case_finished[CASE_NUM] ;
+    bit                                  test_complete           = 0;
+    string                               case_name[CASE_NUM]     ;
+    integer                              tb_case_id              = -1;
+    logic         [8*40-1:0]             tb_case_name            = 0;
+    logic         [31:0]                 random_state            = SEED;
+    logic         [31:0]                 drive_state             = SEED ^ 32&#x27;h5a5a1234;
+    integer                              ready_mode              = 1; // 1: ready, 2: reproducible random.
+    logic                                checking                = 0;
+    logic                                previous_stall          = 0;
+    logic         [TAP*9*PIX+UW-1:0]     previous_payload        = 0;
+    logic                                previous_input_stall    = 0;
+    logic         [DW+UW-1:0]            previous_input_payload  = 0;
+
+    // Only the free-running clock generator uses time delays.
+    always #(PIXEL_HALF) clk = ~clk;
+
+    function automatic [31:0] next_random(input [31:0] value);
+        logic         [31:0]             x ;
+        begin
+            x           = value ^ (value &lt;&lt; 13);
+            x           = x ^ (x &gt;&gt; 17);
+            next_random = x ^ (x &lt;&lt; 5);
+        end
+    endfunction
+    // Source image: pixel value is a function of frame tag and position only.
+    function automatic [PIX-1:0] pixel(input integer tag, line_id, column_id);
+        logic         [31:0]             x ;
+        begin
+            x     = next_random(32&#x27;h9e3779b9 ^ (tag &lt;&lt; 20) ^ (line_id &lt;&lt; 10) ^ column_id);
+            x     = next_random(x);
+            pixel = PIX&#x27;(x &gt;&gt; 7);
+        end
+    endfunction
+    function automatic [DW-1:0] payload(input integer tag, line_id, beat_id);
+        logic         [DW-1:0]           result ;
+        begin
+            for (int lane = 0; lane &lt; TAP; lane++)
+                result[lane*PIX +: PIX] = pixel(tag, line_id, beat_id*TAP + lane);
+            payload = result;
+        end
+    endfunction
+    function automatic [DW-1:0] garbage(input [31:0] value);
+        logic         [DW-1:0]           result ;
+        logic         [31:0]             x      ;
+        begin
+            x = value;
+            for (int lane = 0; lane &lt; TAP; lane++) begin
+                x                       = next_random(x);
+                result[lane*PIX +: PIX] = PIX&#x27;(x &gt;&gt; 5);
+            end
+            garbage = result;
+        end
+    endfunction
+    function automatic [UW-1:0] flags(input bit sof, sol, eol, eof);
+        logic         [UW-1:0]           result ;
+        begin
+            result       = &#x27;0;
+            result[`SOF] = sof;
+            result[`SOL] = sol;
+            result[`EOL] = eol;
+            result[`EOF] = eof;
+            flags        = result;
+        end
+    endfunction
+
+    task automatic report_results;
+        $display(&quot;========== SUMMARY TAP=%0d PIX=%0d UW=%0d LINE_BEATS=%0d HEIGHT=%0d SEED=%h ==========&quot;,
+                 TAP, PIX, UW, LINE_BEATS, HEIGHT, SEED);
+        for (int id = 0; id &lt; CASE_NUM; id++) begin
+            $display(&quot;%0d %-28s %s sent=%0d received=%0d gaps=%0d errors=%0d&quot;, id, case_name[id],
+                     !case_finished[id] ? &quot;INCOMPLETE&quot; : case_errors[id]==0 ? &quot;PASS&quot; : &quot;FAIL&quot;,
+                     case_sent[id], case_received[id], case_gaps[id], case_errors[id]);
+            if (case_finished[id] &amp;&amp; case_errors[id] != 0)
+                $display(&quot;    wrong positions per window index 0..8: %0d %0d %0d / %0d %0d %0d / %0d %0d %0d&quot;,
+                         case_win_bad[id][0], case_win_bad[id][1], case_win_bad[id][2],
+                         case_win_bad[id][3], case_win_bad[id][4], case_win_bad[id][5],
+                         case_win_bad[id][6], case_win_bad[id][7], case_win_bad[id][8]);
+        end
+    endtask
+    task automatic fail(input string message);
+        errors++;
+        if (errors - case_start_errors &lt;= PRINT_LIMIT)
+            $display(&quot;ERROR cycle=%0d case=%0d (%s): %s&quot;, cycles, tb_case_id,
+                     tb_case_id &lt; 0 ? &quot;none&quot; : case_name[tb_case_id], message);
+        else if (errors - case_start_errors == PRINT_LIMIT + 1)
+            $display(&quot;ERROR cycle=%0d case=%0d: more errors in this case, counted but not printed&quot;, cycles, tb_case_id);
+        if (errors &gt;= ERROR_LIMIT) begin
+            report_results();
+            $display(&quot;TEST FAILED: error limit reached&quot;);
+            $fatal(1, &quot;error limit&quot;);
+        end
+    endtask
+
+    always @ (posedge clk) begin : monitor
+        expected_t item;
+        integer                          bad , first_lane, first_win;
+        cycles++;
+        random_state &lt;= next_random(random_state);
+        m_ready      &lt;= ready_mode == 1 ? 1&#x27;b1 : random_state[1:0] != 0;
+        if (cycles &gt; 400000) begin
+            report_results();
+            $display(&quot;TEST FAILED: global watchdog case=%0d&quot;, tb_case_id);
+            $fatal(1, &quot;global watchdog&quot;);
+        end
+        if (!rst_n || !checking) begin
+            previous_stall       = 0;
+            previous_input_stall = 0;
+        end else begin
+            if (previous_input_stall &amp;&amp; (!s_valid || {s_user,s_data} !== previous_input_payload))
+                fail(&quot;source driver changed an unaccepted beat&quot;);
+            previous_input_stall   = s_valid &amp;&amp; !s_ready;
+            previous_input_payload = {s_user,s_data};
+            if (previous_stall &amp;&amp; (!m_valid || {m_user, m_data} !== previous_payload))
+                fail(&quot;output payload/valid changed under backpressure&quot;);
+            previous_stall   = m_valid &amp;&amp; !m_ready;
+            previous_payload = {m_user, m_data};
+            if (s_valid &amp;&amp; s_ready)
+                sent++;
+            if (m_valid &amp;&amp; m_ready) begin
+                received++;
+                if (expected.size() == 0)
+                    fail(&quot;unexpected output transaction&quot;);
+                else begin
+                    item = expected.pop_front();
+                    // Compare every window position that lies inside the image.
+                    bad = 0;
+                    for (int lane = 0; lane &lt; TAP; lane++)
+                        for (int w = 0; w &lt; 9; w++)
+                            if (item.mask[lane][w] &amp;&amp; m_data[lane][w] !== item.data[lane][w]) begin
+                                if (bad == 0) begin
+                                    first_lane = lane;
+                                    first_win  = w;
+                                end
+                                bad++;
+                                case_win_bad[tb_case_id][w]++;
+                            end
+                    if (bad != 0)
+                        fail($sformatf(&quot;window frame=%0d line=%0d beat=%0d: %0d positions wrong, first lane=%0d win[%0d] got=%h expected=%h&quot;,
+                                       item.frame_id, item.line_id, item.beat_id, bad, first_lane, first_win,
+                                       m_data[first_lane][first_win], item.data[first_lane][first_win]));
+                    if (m_user !== item.user_bits)
+                        fail($sformatf(&quot;user frame=%0d line=%0d beat=%0d got=%h expected=%h&quot;,
+                                       item.frame_id, item.line_id, item.beat_id, m_user, item.user_bits));
+                end
+                if (m_user[`EOF] &amp;&amp; !m_user[`EOL])
+                    fail(&quot;EOF without EOL&quot;);
+                if (m_user[`SOF] &amp;&amp; !m_user[`SOL])
+                    fail(&quot;SOF without SOL&quot;);
+            end
+        end
+    end
+
+    // Main reset is pulsed once; the DUT has no enable, cases are separated by idle time.
+    task automatic reset_dut;
+        @(posedge clk);
+        checking   &lt;= 0;
+        rst_n      &lt;= 0;
+        s_valid    &lt;= 0;
+        s_user     &lt;= 0;
+        ready_mode &lt;= 1;
+        repeat(8) @(posedge clk);
+        expected.delete();
+        rst_n &lt;= 1;
+        repeat(8) @(posedge clk);
+        checking &lt;= 1;
+        @(posedge clk);
+    endtask
+
+    // One source clock: drive, then wait until the DUT took it (s_ready = pipeline enable).
+    // Idle clocks are counted the same way, so blanking is measured in enabled clocks.
+    task automatic drive_cycle(input logic valid_value,
+                               input  logic  [DW-1:0]           data_value ,
+                               input  logic  [UW-1:0]           user_value );
+        integer                          count ;
+        s_valid &lt;= valid_value;
+        s_data  &lt;= data_value;
+        s_user  &lt;= user_value;
+        count   =  0;
+        do begin
+            @(posedge clk);
+            count++;
+            if (count &gt;= WAIT_LIMIT) begin
+                fail(&quot;input handshake timeout&quot;);
+                report_results();
+                $display(&quot;TEST FAILED: input timeout&quot;);
+                $fatal(1, &quot;input timeout&quot;);
+            end
+        end while (!s_ready);
+    endtask
+    // tvalid low: tdata / tuser carry garbage, they are only valid in a handshake.
+    task automatic idle_cycles(input integer count);
+        repeat(count) begin
+            drive_state = next_random(drive_state);
+            drive_cycle(1&#x27;b0, garbage(drive_state), UW&#x27;(drive_state &gt;&gt; 11));
+        end
+    endtask
+
+    task automatic send_frame(input integer tag, gap_mode, gap_beat);
+        integer                          gap ;
+        for (int y = 0; y &lt; HEIGHT; y++) begin
+            for (int b = 0; b &lt; LINE_BEATS; b++) begin
+                drive_state = next_random(drive_state);
+                case (gap_mode)
+                    GAP_ONE   : gap = (b == gap_beat) ? 1 : 0;
+                    GAP_RANDOM: gap = drive_state[9] ? 0 : int&#x27;(drive_state[5:4]);
+                    default   : gap = 0;
+                endcase
+                gaps += gap;
+                idle_cycles(gap);
+                drive_cycle(1&#x27;b1, payload(tag, y, b),
+                            flags(y==0 &amp;&amp; b==0, b==0, b==LINE_BEATS-1, y==HEIGHT-1 &amp;&amp; b==LINE_BEATS-1));
+            end
+            idle_cycles(LINE_GAP);
+        end
+        idle_cycles(FRAME_GAP);
+    endtask
+
+    // Reference: built from the source image and the position only, not from DUT state or timing.
+    // Output beat (line, beat) carries for every lane the 3x3 window centered on that pixel.
+    task automatic expect_frame(input integer tag, frame_id);
+        expected_t item;
+        integer                          src_y , src_x;
+        for (int y = 0; y &lt; HEIGHT; y++)
+            for (int b = 0; b &lt; LINE_BEATS; b++) begin
+                item = &#x27;0;
+                for (int lane = 0; lane &lt; TAP; lane++)
+                    for (int w = 0; w &lt; 9; w++) begin
+                        src_y = y + w/3 - 1;
+                        src_x = b*TAP + lane + w%3 - 1;
+                        if (src_y &gt;= 0 &amp;&amp; src_y &lt; HEIGHT &amp;&amp; src_x &gt;= 0 &amp;&amp; src_x &lt; WIDTH) begin
+                            item.data[lane][w] = pixel(tag, src_y, src_x);
+                            item.mask[lane][w] = 1&#x27;b1;
+                        end
+                    end
+                item.user_bits = flags(y==0 &amp;&amp; b==0, b==0, b==LINE_BEATS-1, y==HEIGHT-1 &amp;&amp; b==LINE_BEATS-1);
+                item.frame_id  = 16&#x27;(frame_id);
+                item.line_id   = 16&#x27;(y);
+                item.beat_id   = 16&#x27;(b);
+                expected.push_back(item);
+            end
+    endtask
+
+    // Missing output is a case failure, the next case still runs.
+    task automatic drain;
+        integer                          count ;
+        count = 0;
+        while ((expected.size() != 0 || m_valid) &amp;&amp; count &lt; WAIT_LIMIT) begin
+            @(posedge clk);
+            count++;
+        end
+        if (expected.size() != 0) begin
+            fail($sformatf(&quot;drain timeout: %0d expected transactions remain&quot;, expected.size()));
+            expected.delete();
+        end
+        repeat(FRAME_GAP) @(posedge clk);
+    endtask
+
+    task automatic run_frames(input integer ready_value, gap_mode, gap_beat);
+        ready_mode &lt;= ready_value;
+        @(posedge clk);
+        for (int f = 0; f &lt; FRAME_NUM; f++) begin
+            expect_frame(tb_case_id*16 + f, f);
+            send_frame(tb_case_id*16 + f, gap_mode, gap_beat);
+        end
+    endtask
+
+    task automatic run_case(input integer id);
+        integer                          start_sent , start_received, start_gaps;
+        @(posedge clk);
+        tb_case_id        = id;
+        tb_case_name      = 320&#x27;(case_name[id]);
+        case_start_errors = errors;
+        start_sent        = sent;
+        start_received    = received;
+        start_gaps        = gaps;
+        $display(&quot;========== CASE %0d %s BEGIN ==========&quot;, id, case_name[id]);
+        case (id)
+            0: case_cont_valid_ready();
+            1: case_cont_valid_random_ready();
+            2: case_one_gap_mid_line();
+            3: case_one_gap_before_last_beat();
+            4: case_random_gap_ready();
+            5: case_random_gap_random_ready();
+            6: case_cont_valid_after_gap();
+        endcase
+        drain();
+        @(posedge clk);
+        case_errors[id]   = errors-case_start_errors;
+        case_sent[id]     = sent-start_sent;
+        case_received[id] = received-start_received;
+        case_gaps[id]     = gaps-start_gaps;
+        case_finished[id] = 1;
+        $display(&quot;========== CASE %0d %s %s (%0d errors) ==========&quot;, id, case_name[id],
+                 case_errors[id]==0 ? &quot;PASS&quot; : &quot;FAIL&quot;, case_errors[id]);
+    endtask
+
+    initial begin
+        @(posedge clk);
+        case_name[0] = &quot;cont_valid_ready&quot;;
+        case_name[1] = &quot;cont_valid_random_ready&quot;;
+        case_name[2] = &quot;one_gap_mid_line&quot;;
+        case_name[3] = &quot;one_gap_before_last_beat&quot;;
+        case_name[4] = &quot;random_gap_ready&quot;;
+        case_name[5] = &quot;random_gap_random_ready&quot;;
+        case_name[6] = &quot;cont_valid_after_gap&quot;;
+        for (int id = 0; id &lt; CASE_NUM; id++)
+            for (int w = 0; w &lt; 9; w++)
+                case_win_bad[id][w] = 0;
+        reset_dut();
+        for (int id = 0; id &lt; CASE_NUM; id++) run_case(id);
+        @(posedge clk);
+        report_results();
+        if (errors != 0) begin
+            $display(&quot;TEST FAILED&quot;);
+            $fatal(1, &quot;scoreboard errors=%0d&quot;, errors);
+        end
+        $display(&quot;TEST PASSED&quot;);
+        test_complete = 1;
+        $finish;
+    end
+
+    matrix_3x3_gen #(
+        .PIXEL_WIDTH           (PIX       ),
+        .PIXEL_TAP_NUM         (TAP       ),
+        .PIXEL_AXIS_USER_WIDTH (UW        ),
+        .PIXEL_LINE_WIDTH_MAX  (LINE_MAX  )
+    ) dut (
+        .i_pixel_clk           (clk       ),
+        .i_pixel_rst_n         (rst_n     ),
+        .i_x_width             (width_cfg ),
+        .i_y_height            (height_cfg),
+        .i_s_axis_tvalid       (s_valid   ),
+        .o_s_axis_tready       (s_ready   ),
+        .i_s_axis_tdata        (s_data    ),
+        .i_s_axis_tuser        (s_user    ),
+        .o_m_axis_tvalid       (m_valid   ),
+        .i_m_axis_tready       (m_ready   ),
+        .o_m_axis_tdata        (m_data    ),
+        .o_m_axis_tuser        (m_user    )
+    );
+
+    // Baseline: tvalid continuous inside a line, the module must pass these.
+    task automatic case_cont_valid_ready;
+        run_frames(1, GAP_NONE, 0);
+    endtask
+    task automatic case_cont_valid_random_ready;
+        run_frames(2, GAP_NONE, 0);
+    endtask
+    // Smallest reproduction: one idle clock in the middle of every line.
+    task automatic case_one_gap_mid_line;
+        run_frames(1, GAP_ONE, LINE_BEATS/2);
+    endtask
+    // One idle clock right before the last beat of every line.
+    task automatic case_one_gap_before_last_beat;
+        run_frames(1, GAP_ONE, LINE_BEATS-1);
+    endtask
+    // Stress: random tvalid gaps, without and with random backpressure.
+    task automatic case_random_gap_ready;
+        run_frames(1, GAP_RANDOM, 0);
+    endtask
+    task automatic case_random_gap_random_ready;
+        run_frames(2, GAP_RANDOM, 0);
+    endtask
+    // Continuous tvalid again: shows whether the module recovers after gapped frames.
+    task automatic case_cont_valid_after_gap;
+        run_frames(1, GAP_NONE, 0);
+    endtask
+
+endmodule
+</pre></section>
+<section id="f1"><h2>scripts/run_questa.ps1</h2><p>Questa 回归脚本，TAP=8/4/2/1 四组配置</p><pre tabindex="0">param(
+    [string]$QuestaBin = &#x27;A:\software\Questa\questa24.1\win64&#x27;,
+    [switch]$Waves
+)
+
+$ErrorActionPreference = &#x27;Stop&#x27;
+$sourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot &#x27;..&#x27;))
+$logRoot = Join-Path $PSScriptRoot &#x27;logs&#x27;
+$buildRoot = Join-Path ([IO.Path]::GetTempPath()) (&#x27;matrix_3x3_gen_questa_&#x27; + [Guid]::NewGuid().ToString(&#x27;N&#x27;))
+New-Item -ItemType Directory -Path $logRoot, $buildRoot -Force | Out-Null
+$library = (Join-Path $buildRoot &#x27;work&#x27;).Replace(&#x27;\&#x27;, &#x27;/&#x27;)
+$rtl = (Join-Path $sourceRoot &#x27;rtl&#x27;).Replace(&#x27;\&#x27;, &#x27;/&#x27;)
+$tb = (Join-Path $sourceRoot &#x27;tb&#x27;).Replace(&#x27;\&#x27;, &#x27;/&#x27;)
+
+foreach ($tool in &#x27;vlib.exe&#x27;, &#x27;vlog.exe&#x27;, &#x27;vsim.exe&#x27;) {
+    if (-not (Test-Path -LiteralPath (Join-Path $QuestaBin $tool))) {
+        throw &quot;Questa executable missing: $QuestaBin\$tool&quot;
+    }
+}
+
+&amp; (Join-Path $QuestaBin &#x27;vlib.exe&#x27;) $library
+if ($LASTEXITCODE -ne 0) { throw &#x27;vlib failed&#x27; }
+$compileLog = Join-Path $logRoot &#x27;compile.log&#x27;
+# matrix_3x3_gen includes &quot;./../define_isp.sv&quot;, so its own directory is an include directory too.
+&amp; (Join-Path $QuestaBin &#x27;vlog.exe&#x27;) -sv -svinputport=net -work $library &#x27;+define+SIMULATION&#x27; `
+    &quot;+incdir+$rtl&quot; &quot;+incdir+$rtl/matrix_3x3_gen&quot; `
+    &quot;$rtl/ip/ram/two_port_ram_isp.sv&quot; &quot;$rtl/matrix_3x3_gen/matrix_3x3_gen.sv&quot; `
+    &quot;$tb/tb_matrix_3x3_gen.sv&quot; 2&gt;&amp;1 |
+    Tee-Object -FilePath $compileLog
+if ($LASTEXITCODE -ne 0) { throw &#x27;RTL/TB compile failed&#x27; }
+
+# Every simulation runs its entire case list. Generics only vary hardware shape.
+$runs = @(
+    @{ Name=&#x27;matrix_tap8&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=8&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gLINE_BEATS=8&#x27;);  Cases=7 },
+    @{ Name=&#x27;matrix_tap4&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=4&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gLINE_BEATS=8&#x27;);  Cases=7 },
+    @{ Name=&#x27;matrix_tap2&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=2&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gLINE_BEATS=8&#x27;);  Cases=7 },
+    @{ Name=&#x27;matrix_tap1&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=1&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gLINE_BEATS=16&#x27;); Cases=7 }
+)
+
+# All runs are executed even when one fails, the summary lists every case of every run.
+$results = @()
+$caseLines = @()
+foreach ($run in $runs) {
+    $simLog = (Join-Path $logRoot ($run.Name + &#x27;.log&#x27;)).Replace(&#x27;\&#x27;, &#x27;/&#x27;)
+    $waveLog = (Join-Path $logRoot ($run.Name + &#x27;.wlf&#x27;)).Replace(&#x27;\&#x27;, &#x27;/&#x27;)
+    $top = $run.Top
+    $waveCommand = if ($Waves) { &quot;log -r /$top/*; &quot; } else { &#x27;&#x27; }
+    # Treat a fatal/watchdog break as failure, including a fatal that returns to Tcl.
+    $doText = &quot;onerror {quit -code 1}; onbreak {if {[examine -radix decimal /$top/test_complete] != 0} {quit -code 0} else {quit -code 1}}; ${waveCommand}run -all; &quot; +
+              &quot;if {[examine -radix decimal /$top/test_complete] == 0} {quit -code 1}; quit -code 0&quot;
+    $doPath = Join-Path $buildRoot ($run.Name + &#x27;.do&#x27;)
+    [IO.File]::WriteAllText($doPath, $doText, [Text.UTF8Encoding]::new($false))
+    Write-Output &quot;Running $($run.Name)...&quot;
+    $simArguments = @(&#x27;-c&#x27;,&#x27;-onfinish&#x27;,&#x27;stop&#x27;,&#x27;-voptargs=+acc&#x27;,&#x27;-lib&#x27;,$library,$top) + $run.Args +
+                    @(&#x27;-do&#x27;,(&#x27;do {&#x27; + $doPath.Replace(&#x27;\&#x27;,&#x27;/&#x27;) + &#x27;}&#x27;),&#x27;-l&#x27;,$simLog,&#x27;-wlf&#x27;,$waveLog)
+    &amp; (Join-Path $QuestaBin &#x27;vsim.exe&#x27;) @simArguments 2&gt;&amp;1 | Out-File -LiteralPath ($simLog + &#x27;.console&#x27;) -Encoding utf8
+    $simExit = $LASTEXITCODE
+    $logText = if (Test-Path -LiteralPath $simLog) { Get-Content -LiteralPath $simLog -Raw } else { &#x27;&#x27; }
+    $casePasses = ([regex]::Matches($logText, &#x27;(?m)^# ========== CASE \d+ .+ PASS \(0 errors\) ==========\s*$&#x27;)).Count
+    $passed = $simExit -eq 0 -and $logText -match &#x27;(?m)^# TEST PASSED\s*$&#x27; -and
+              $logText -notmatch &#x27;TEST FAILED|\*\* (?:Error|Fatal):|# ERROR cycle=&#x27; -and $casePasses -eq $run.Cases
+    $results += [pscustomobject]@{Run=$run.Name; Top=$top; Cases=$casePasses; Expected=$run.Cases; Result= $(if ($passed) {&#x27;PASS&#x27;} else {&#x27;FAIL&#x27;})}
+    $caseLines += &quot;[$($run.Name)]&quot;
+    $caseLines += [regex]::Matches($logText, &#x27;(?m)^# (\d+ \S+ +(?:PASS|FAIL|INCOMPLETE) .*|    wrong positions .*)$&#x27;) | ForEach-Object { $_.Groups[1].Value.TrimEnd() }
+}
+
+$results | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $logRoot &#x27;results.json&#x27;) -Encoding utf8
+$failed = @($results | Where-Object { $_.Result -ne &#x27;PASS&#x27; }).Count
+$verdict = if ($failed -eq 0) { &quot;ALL TESTS PASSED: $($results.Count) runs.&quot; } else { &quot;TESTS FAILED: $failed of $($results.Count) runs.&quot; }
+$summary = ($caseLines -join &quot;`r`n&quot;) + &quot;`r`n&quot; + ($results | Format-Table -AutoSize | Out-String) + $verdict + &quot;`r`n&quot;
+$summary | Set-Content -LiteralPath (Join-Path $logRoot &#x27;summary.txt&#x27;) -Encoding utf8
+Write-Output $summary
+if ($failed -ne 0) { exit 1 }
+</pre></section>
+<section id="f2"><h2>scripts/run_questa.bat</h2><p>双击启动，同 example_run.bat</p><pre tabindex="0">@echo off
+setlocal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;%~dp0run_questa.ps1&quot; %*
+set &quot;SIM_EXIT=%ERRORLEVEL%&quot;
+echo.
+if not &quot;%SIM_EXIT%&quot;==&quot;0&quot; echo Questa regression FAILED.
+pause
+exit /b %SIM_EXIT%
+</pre></section>
+<section id="f3"><h2>scripts/logs/summary.txt</h2><p>本次仿真汇总（原始 RTL）</p><pre tabindex="0">[matrix_tap8]
+0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
+2 one_gap_mid_line                   FAIL sent=144 received=144 gaps=18 errors=30
+    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
+3 one_gap_before_last_beat           FAIL sent=144 received=144 gaps=18 errors=36
+    wrong positions per window index 0..8: 105 120 120 / 105 120 120 / 15 0 15
+4 random_gap_ready                   FAIL sent=144 received=144 gaps=117 errors=66
+    wrong positions per window index 0..8: 28 32 63 / 14 16 52 / 38 0 38
+5 random_gap_random_ready            FAIL sent=144 received=144 gaps=109 errors=75
+    wrong positions per window index 0..8: 49 56 85 / 28 32 69 / 41 0 41
+6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
+[matrix_tap4]
+0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
+2 one_gap_mid_line                   FAIL sent=144 received=144 gaps=18 errors=30
+    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
+3 one_gap_before_last_beat           FAIL sent=144 received=144 gaps=18 errors=36
+    wrong positions per window index 0..8: 45 60 60 / 45 60 60 / 15 0 15
+4 random_gap_ready                   FAIL sent=144 received=144 gaps=117 errors=66
+    wrong positions per window index 0..8: 12 16 47 / 6 8 44 / 38 0 38
+5 random_gap_random_ready            FAIL sent=144 received=144 gaps=109 errors=75
+    wrong positions per window index 0..8: 21 28 57 / 12 16 53 / 41 0 41
+6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
+[matrix_tap2]
+0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
+2 one_gap_mid_line                   FAIL sent=144 received=144 gaps=18 errors=30
+    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
+3 one_gap_before_last_beat           FAIL sent=144 received=144 gaps=18 errors=36
+    wrong positions per window index 0..8: 15 30 30 / 15 30 30 / 15 0 15
+4 random_gap_ready                   FAIL sent=144 received=144 gaps=117 errors=66
+    wrong positions per window index 0..8: 4 8 39 / 2 4 40 / 38 0 38
+5 random_gap_random_ready            FAIL sent=144 received=144 gaps=109 errors=75
+    wrong positions per window index 0..8: 7 14 43 / 4 8 45 / 41 0 41
+6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
+[matrix_tap1]
+0 cont_valid_ready                   PASS sent=288 received=288 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=288 received=288 gaps=0 errors=0
+2 one_gap_mid_line                   FAIL sent=288 received=288 gaps=18 errors=30
+    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
+3 one_gap_before_last_beat           FAIL sent=288 received=288 gaps=18 errors=36
+    wrong positions per window index 0..8: 0 15 15 / 0 15 15 / 15 0 15
+4 random_gap_ready                   FAIL sent=288 received=288 gaps=238 errors=149
+    wrong positions per window index 0..8: 0 7 68 / 0 5 88 / 88 0 88
+5 random_gap_random_ready            FAIL sent=288 received=288 gaps=235 errors=156
+    wrong positions per window index 0..8: 0 8 76 / 0 7 90 / 90 0 90
+6 cont_valid_after_gap               PASS sent=288 received=288 gaps=0 errors=0
+
+Run         Top               Cases Expected Result
+---         ---               ----- -------- ------
+matrix_tap8 tb_matrix_3x3_gen     3        7 FAIL  
+matrix_tap4 tb_matrix_3x3_gen     3        7 FAIL  
+matrix_tap2 tb_matrix_3x3_gen     3        7 FAIL  
+matrix_tap1 tb_matrix_3x3_gen     3        7 FAIL  
+
+
+TESTS FAILED: 4 of 4 runs.
+
+</pre></section>
+</main></html>
