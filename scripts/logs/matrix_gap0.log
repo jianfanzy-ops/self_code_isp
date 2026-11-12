@@ -1,5 +1,5 @@
-# vsim -c -onfinish stop -voptargs="+acc" -lib C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_719de04c0ddc4579ac01406045fa1541/work tb_matrix_3x3_gen -do "do {C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_719de04c0ddc4579ac01406045fa1541/matrix_gap0.do}" -l B:/fpga/work_space_claude/isp_color_bench/scripts/logs/matrix_gap0.log -wlf B:/fpga/work_space_claude/isp_color_bench/scripts/logs/matrix_gap0.wlf -gPIX=12 -gTAP=4 -gLINE_GAP=0 
-# Start time: 14:01:58 on Nov 12,2026
+# vsim -c -onfinish stop -voptargs="+acc" -lib C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_8b4d918e37224f6dac41ea090301d986/work tb_matrix_3x3_gen -do "do {C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_8b4d918e37224f6dac41ea090301d986/matrix_gap0.do}" -l B:/fpga/work_space_claude/isp_color_bench/scripts/logs/matrix_gap0.log -wlf B:/fpga/work_space_claude/isp_color_bench/scripts/logs/matrix_gap0.wlf -gPIX=12 -gTAP=4 -gLINE_GAP=0 
+# Start time: 14:21:12 on Nov 12,2026
 # ** Note: (vsim-3812) Design is being optimized...
 # ** Warning: (vopt-10587) Some optimizations are turned off because the +acc switch is in effect. This will cause your simulation to run slowly. Please use -access/-debug to maintain needed visibility.
 # ** Note: (vsim-12126) Error and warning message counts have been restored: Errors=0, Warnings=1.
@@ -25,7 +25,7 @@
 # Loading work.isp_GrayCnt(fast)
 # Loading work.isp_GrayDecode(fast)
 # Loading work.isp_dc_fifo(fast__1)
-# do {C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_719de04c0ddc4579ac01406045fa1541/matrix_gap0.do}
+# do {C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_8b4d918e37224f6dac41ea090301d986/matrix_gap0.do}
 # ========== CASE 0 cont_valid_ready BEGIN ==========
 # ========== CASE 0 cont_valid_ready PASS (0 errors) ==========
 # ========== CASE 1 cont_valid_random_ready BEGIN ==========
@@ -40,6 +40,8 @@
 # ========== CASE 5 random_gap_random_ready PASS (0 errors) ==========
 # ========== CASE 6 cont_valid_after_gap BEGIN ==========
 # ========== CASE 6 cont_valid_after_gap PASS (0 errors) ==========
+# ========== CASE 7 reset_drops_input BEGIN ==========
+# ========== CASE 7 reset_drops_input PASS (0 errors) ==========
 # ========== SUMMARY TAP=4 PIX=12 UW=4 LINE_BEATS=8 HEIGHT=6 SEED=4e4f5609 ==========
 # 0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
 # 1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
@@ -48,9 +50,10 @@
 # 4 random_gap_ready                   PASS sent=144 received=144 gaps=105 errors=0
 # 5 random_gap_random_ready            PASS sent=144 received=144 gaps=112 errors=0
 # 6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
+# 7 reset_drops_input                  PASS sent=144 received=144 gaps=134 errors=0
 # TEST PASSED
-# ** Note: $finish    : B:/fpga/work_space_claude/isp_color_bench/tb/tb_matrix_3x3_gen.sv(387)
-#    Time: 19834500 ps  Iteration: 1  Instance: /tb_matrix_3x3_gen
-# Break in Module tb_matrix_3x3_gen at B:/fpga/work_space_claude/isp_color_bench/tb/tb_matrix_3x3_gen.sv line 387
-# End time: 14:02:00 on Nov 12,2026, Elapsed time: 0:00:02
+# ** Note: $finish    : B:/fpga/work_space_claude/isp_color_bench/tb/tb_matrix_3x3_gen.sv(399)
+#    Time: 24853500 ps  Iteration: 1  Instance: /tb_matrix_3x3_gen
+# Break in Module tb_matrix_3x3_gen at B:/fpga/work_space_claude/isp_color_bench/tb/tb_matrix_3x3_gen.sv line 399
+# End time: 14:21:14 on Nov 12,2026, Elapsed time: 0:00:02
 # Errors: 0, Warnings: 1

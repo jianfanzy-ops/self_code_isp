@@ -31,15 +31,15 @@ if ($LASTEXITCODE -ne 0) { throw 'RTL/TB compile failed' }
 
 # Every simulation runs its entire case list. Generics only vary hardware shape.
 $runs = @(
-    @{ Name='matrix_tap8'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=8','-gPIX=10','-gLINE_BEATS=8');  Cases=7 },
-    @{ Name='matrix_tap4'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=4','-gPIX=10','-gLINE_BEATS=8');  Cases=7 },
-    @{ Name='matrix_tap2'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=2','-gPIX=10','-gLINE_BEATS=8');  Cases=7 },
-    @{ Name='matrix_tap1'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=1','-gPIX=10','-gLINE_BEATS=16'); Cases=7 },
-    @{ Name='matrix_gap0'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=4','-gPIX=12','-gLINE_GAP=0');    Cases=7 },
-    @{ Name='matrix_gap1'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=2','-gPIX=8','-gLINE_GAP=1');     Cases=7 },
-    @{ Name='matrix_h2';   Top='tb_matrix_3x3_gen'; Args=@('-gTAP=8','-gPIX=10','-gHEIGHT=2');      Cases=7 },
-    @{ Name='matrix_h1';   Top='tb_matrix_3x3_gen'; Args=@('-gTAP=4','-gPIX=10','-gHEIGHT=1');      Cases=7 },
-    @{ Name='matrix_full'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=8','-gPIX=10','-gLINE_BEATS=32','-gLINE_MAX=256'); Cases=7 }
+    @{ Name='matrix_tap8'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=8','-gPIX=10','-gLINE_BEATS=8');  Cases=8 },
+    @{ Name='matrix_tap4'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=4','-gPIX=10','-gLINE_BEATS=8');  Cases=8 },
+    @{ Name='matrix_tap2'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=2','-gPIX=10','-gLINE_BEATS=8');  Cases=8 },
+    @{ Name='matrix_tap1'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=1','-gPIX=10','-gLINE_BEATS=16'); Cases=8 },
+    @{ Name='matrix_gap0'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=4','-gPIX=12','-gLINE_GAP=0');    Cases=8 },
+    @{ Name='matrix_gap1'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=2','-gPIX=8','-gLINE_GAP=1');     Cases=8 },
+    @{ Name='matrix_h2';   Top='tb_matrix_3x3_gen'; Args=@('-gTAP=8','-gPIX=10','-gHEIGHT=2');      Cases=8 },
+    @{ Name='matrix_h1';   Top='tb_matrix_3x3_gen'; Args=@('-gTAP=4','-gPIX=10','-gHEIGHT=1');      Cases=8 },
+    @{ Name='matrix_full'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=8','-gPIX=10','-gLINE_BEATS=32','-gLINE_MAX=256'); Cases=8 }
 )
 
 # All runs are executed even when one fails, the summary lists every case of every run.

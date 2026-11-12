@@ -2,64 +2,64 @@
     {
         "Run":  "matrix_tap8",
         "Top":  "tb_matrix_3x3_gen",
-        "Cases":  7,
-        "Expected":  7,
+        "Cases":  8,
+        "Expected":  8,
         "Result":  "PASS"
     },
     {
         "Run":  "matrix_tap4",
         "Top":  "tb_matrix_3x3_gen",
-        "Cases":  7,
-        "Expected":  7,
+        "Cases":  8,
+        "Expected":  8,
         "Result":  "PASS"
     },
     {
         "Run":  "matrix_tap2",
         "Top":  "tb_matrix_3x3_gen",
-        "Cases":  7,
-        "Expected":  7,
+        "Cases":  8,
+        "Expected":  8,
         "Result":  "PASS"
     },
     {
         "Run":  "matrix_tap1",
         "Top":  "tb_matrix_3x3_gen",
-        "Cases":  7,
-        "Expected":  7,
+        "Cases":  8,
+        "Expected":  8,
         "Result":  "PASS"
     },
     {
         "Run":  "matrix_gap0",
         "Top":  "tb_matrix_3x3_gen",
-        "Cases":  7,
-        "Expected":  7,
+        "Cases":  8,
+        "Expected":  8,
         "Result":  "PASS"
     },
     {
         "Run":  "matrix_gap1",
         "Top":  "tb_matrix_3x3_gen",
-        "Cases":  7,
-        "Expected":  7,
+        "Cases":  8,
+        "Expected":  8,
         "Result":  "PASS"
     },
     {
         "Run":  "matrix_h2",
         "Top":  "tb_matrix_3x3_gen",
-        "Cases":  7,
-        "Expected":  7,
+        "Cases":  8,
+        "Expected":  8,
         "Result":  "PASS"
     },
     {
         "Run":  "matrix_h1",
         "Top":  "tb_matrix_3x3_gen",
-        "Cases":  7,
-        "Expected":  7,
+        "Cases":  8,
+        "Expected":  8,
         "Result":  "PASS"
     },
     {
         "Run":  "matrix_full",
         "Top":  "tb_matrix_3x3_gen",
-        "Cases":  7,
-        "Expected":  7,
+        "Cases":  8,
+        "Expected":  8,
         "Result":  "PASS"
     }
 ]

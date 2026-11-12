@@ -96,9 +96,9 @@ module matrix_3x3_gen #(
     assign line2_en        = line_cnt[1];
     assign fifo_ready      = (~line1_en | ~line1_fifo_rd_empty) & (~line2_en | ~line2_fifo_rd_empty)
                            & ~line1_fifo_wr_full & ~line2_fifo_wr_full;
-    //no input while the last line is flushed
-    assign o_s_axis_tready = i_m_axis_tready & fifo_ready & ~end_stream_flag;
-    assign s_axis_hs       = i_s_axis_tvalid & o_s_axis_tready;
+    //no input while the last line is flushed; in reset the input is taken and dropped
+    assign o_s_axis_tready = ~i_pixel_rst_n ? 1'b1 : i_m_axis_tready & fifo_ready & ~end_stream_flag;
+    assign s_axis_hs       = i_s_axis_tvalid & o_s_axis_tready & i_pixel_rst_n;
     assign flush_step      = i_m_axis_tready & fifo_ready & end_stream_flag & flush_gap_done;
     assign step            = s_axis_hs | flush_step;
 

@@ -23,7 +23,7 @@ module tb_matrix_3x3_gen #(
     localparam integer WIDTH       = TAP * LINE_BEATS;
     localparam integer FRAME_GAP   = 2*LINE_GAP + LINE_BEATS + 32;//covers the DUT flush of the last line
     localparam integer FRAME_NUM   = 3;                           //frames per case
-    localparam integer CASE_NUM    = 7;
+    localparam integer CASE_NUM    = 8;
     localparam integer WAIT_LIMIT  = 12000;
     localparam integer PRINT_LIMIT = 6;                           //printed errors per case, the rest is only counted
     localparam integer ERROR_LIMIT = 4000;
@@ -78,6 +78,7 @@ module tb_matrix_3x3_gen #(
     logic         [TAP*9*PIX+UW-1:0]     previous_payload        = 0;
     logic                                previous_input_stall    = 0;
     logic         [DW+UW-1:0]            previous_input_payload  = 0;
+    logic                                previous_rst_n          = 0;
 
     // Only the free-running clock generator uses time delays.
     always #(PIXEL_HALF) clk = ~clk;
@@ -170,6 +171,12 @@ module tb_matrix_3x3_gen #(
             $display("TEST FAILED: global watchdog case=%0d", tb_case_id);
             $fatal(1, "global watchdog");
         end
+        // In reset the input is taken and dropped, and nothing is sent.
+        if (!rst_n && s_ready !== 1'b1)
+            fail("s_ready is not high in reset");
+        if (!rst_n && !previous_rst_n && m_valid !== 1'b0)
+            fail("m_valid is not low in reset");
+        previous_rst_n = rst_n;
         if (!rst_n || !checking) begin
             previous_stall       = 0;
             previous_input_stall = 0;
@@ -263,9 +270,9 @@ module tb_matrix_3x3_gen #(
         end
     endtask
 
-    task automatic send_frame(input integer tag, gap_mode, gap_beat);
+    task automatic send_lines(input integer tag, first_line, line_num, gap_mode, gap_beat);
         integer                          gap ;
-        for (int y = 0; y < HEIGHT; y++) begin
+        for (int y = first_line; y < first_line + line_num; y++) begin
             for (int b = 0; b < LINE_BEATS; b++) begin
                 drive_state = next_random(drive_state);
                 case (gap_mode)
@@ -280,6 +287,9 @@ module tb_matrix_3x3_gen #(
             end
             idle_cycles(LINE_GAP);
         end
+    endtask
+    task automatic send_frame(input integer tag, gap_mode, gap_beat);
+        send_lines(tag, 0, HEIGHT, gap_mode, gap_beat);
         idle_cycles(FRAME_GAP);
     endtask
 
@@ -350,6 +360,7 @@ module tb_matrix_3x3_gen #(
             4: case_random_gap_ready();
             5: case_random_gap_random_ready();
             6: case_cont_valid_after_gap();
+            7: case_reset_drops_input();
         endcase
         drain();
         @(posedge clk);
@@ -371,6 +382,7 @@ module tb_matrix_3x3_gen #(
         case_name[4] = "random_gap_ready";
         case_name[5] = "random_gap_random_ready";
         case_name[6] = "cont_valid_after_gap";
+        case_name[7] = "reset_drops_input";
         for (int id = 0; id < CASE_NUM; id++)
             for (int w = 0; w < 9; w++)
                 case_win_bad[id][w] = 0;
@@ -432,6 +444,22 @@ module tb_matrix_3x3_gen #(
     // Continuous tvalid again: shows whether the module recovers after gapped frames.
     task automatic case_cont_valid_after_gap;
         run_frames(1, GAP_NONE, 0);
+    endtask
+    // Reset in the middle of a frame: the rest of the frame is sent in reset and must be dropped,
+    // the frames after the reset must be complete and correct.
+    task automatic case_reset_drops_input;
+        ready_mode <= 2;
+        checking   <= 0;
+        @(posedge clk);
+        send_lines(tb_case_id*16 + 15, 0, HEIGHT/2, GAP_RANDOM, 0);
+        rst_n <= 0;
+        send_lines(tb_case_id*16 + 15, HEIGHT/2, HEIGHT - HEIGHT/2, GAP_RANDOM, 0);
+        idle_cycles(8);
+        expected.delete();
+        rst_n <= 1;
+        idle_cycles(FRAME_GAP);
+        checking <= 1;
+        run_frames(2, GAP_RANDOM, 0);
     endtask
 
 endmodule
