@@ -1,5 +1,5 @@
-# vsim -c -onfinish stop -voptargs="+acc" -lib C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_2b1550a164ec480186e7ac0e09b67d29/work tb_matrix_3x3_gen -do "do {C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_2b1550a164ec480186e7ac0e09b67d29/matrix_tap1.do}" -l B:/fpga/work_space_claude/isp_color_bench/scripts/logs/matrix_tap1.log -wlf B:/fpga/work_space_claude/isp_color_bench/scripts/logs/matrix_tap1.wlf -gPIX=10 -gTAP=1 -gLINE_BEATS=16 
-# Start time: 11:27:18 on Nov 12,2026
+# vsim -c -onfinish stop -voptargs="+acc" -lib C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_2bca9661bbc94fd1ab1d93e1a8f58d7c/work tb_matrix_3x3_gen -do "do {C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_2bca9661bbc94fd1ab1d93e1a8f58d7c/matrix_tap1.do}" -l B:/fpga/work_space_claude/isp_color_bench/scripts/logs/matrix_tap1.log -wlf B:/fpga/work_space_claude/isp_color_bench/scripts/logs/matrix_tap1.wlf -gPIX=10 -gTAP=1 -gLINE_BEATS=16 
+# Start time: 12:17:51 on Nov 12,2026
 # ** Note: (vsim-3812) Design is being optimized...
 # ** Warning: (vopt-10587) Some optimizations are turned off because the +acc switch is in effect. This will cause your simulation to run slowly. Please use -access/-debug to maintain needed visibility.
 # ** Note: (vsim-12126) Error and warning message counts have been restored: Errors=0, Warnings=1.
@@ -20,67 +20,37 @@
 # Loading sv_std.std
 # Loading work.tb_matrix_3x3_gen(fast)
 # Loading work.matrix_3x3_gen(fast)
-# Loading work.two_port_ram_isp(fast)
-# do {C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_2b1550a164ec480186e7ac0e09b67d29/matrix_tap1.do}
+# Loading work.isp_dc_fifo(fast)
+# Loading work.isp_FifoAddrCnt(fast)
+# Loading work.isp_GrayCnt(fast)
+# Loading work.isp_GrayDecode(fast)
+# Loading work.isp_dc_fifo(fast__1)
+# do {C:/Users/28103/AppData/Local/Temp/matrix_3x3_gen_questa_2bca9661bbc94fd1ab1d93e1a8f58d7c/matrix_tap1.do}
 # ========== CASE 0 cont_valid_ready BEGIN ==========
 # ========== CASE 0 cont_valid_ready PASS (0 errors) ==========
 # ========== CASE 1 cont_valid_random_ready BEGIN ==========
 # ========== CASE 1 cont_valid_random_ready PASS (0 errors) ==========
 # ========== CASE 2 one_gap_mid_line BEGIN ==========
-# ERROR cycle=2140 case=2 (one_gap_mid_line): window frame=0 line=0 beat=7: 2 positions wrong, first lane=0 win[5] got=30e expected=04a
-# ERROR cycle=2142 case=2 (one_gap_mid_line): window frame=0 line=0 beat=8: 1 positions wrong, first lane=0 win[6] got=056 expected=126
-# ERROR cycle=2173 case=2 (one_gap_mid_line): window frame=0 line=1 beat=7: 3 positions wrong, first lane=0 win[2] got=30e expected=04a
-# ERROR cycle=2175 case=2 (one_gap_mid_line): window frame=0 line=1 beat=8: 1 positions wrong, first lane=0 win[6] got=304 expected=35f
-# ERROR cycle=2206 case=2 (one_gap_mid_line): window frame=0 line=2 beat=7: 3 positions wrong, first lane=0 win[2] got=126 expected=262
-# ERROR cycle=2208 case=2 (one_gap_mid_line): window frame=0 line=2 beat=8: 1 positions wrong, first lane=0 win[6] got=0f8 expected=177
-# ERROR cycle=2239 case=2: more errors in this case, counted but not printed
-# ========== CASE 2 one_gap_mid_line FAIL (30 errors) ==========
+# ========== CASE 2 one_gap_mid_line PASS (0 errors) ==========
 # ========== CASE 3 one_gap_before_last_beat BEGIN ==========
-# ERROR cycle=3064 case=3 (one_gap_before_last_beat): window frame=0 line=0 beat=14: 2 positions wrong, first lane=0 win[5] got=322 expected=32e
-# ERROR cycle=3066 case=3 (one_gap_before_last_beat): window frame=0 line=0 beat=15: 2 positions wrong, first lane=0 win[4] got=242 expected=32e
-# ERROR cycle=3097 case=3 (one_gap_before_last_beat): window frame=0 line=1 beat=14: 3 positions wrong, first lane=0 win[2] got=322 expected=32e
-# ERROR cycle=3099 case=3 (one_gap_before_last_beat): window frame=0 line=1 beat=15: 3 positions wrong, first lane=0 win[1] got=242 expected=32e
-# ERROR cycle=3130 case=3 (one_gap_before_last_beat): window frame=0 line=2 beat=14: 3 positions wrong, first lane=0 win[2] got=10a expected=106
-# ERROR cycle=3132 case=3 (one_gap_before_last_beat): window frame=0 line=2 beat=15: 3 positions wrong, first lane=0 win[1] got=03b expected=106
-# ERROR cycle=3163 case=3: more errors in this case, counted but not printed
-# ========== CASE 3 one_gap_before_last_beat FAIL (36 errors) ==========
+# ========== CASE 3 one_gap_before_last_beat PASS (0 errors) ==========
 # ========== CASE 4 random_gap_ready BEGIN ==========
-# ERROR cycle=3978 case=4 (random_gap_ready): window frame=0 line=0 beat=0: 2 positions wrong, first lane=0 win[5] got=1aa expected=1a6
-# ERROR cycle=3981 case=4 (random_gap_ready): window frame=0 line=0 beat=1: 3 positions wrong, first lane=0 win[5] got=1a6 expected=0b2
-# ERROR cycle=3985 case=4 (random_gap_ready): window frame=0 line=0 beat=2: 3 positions wrong, first lane=0 win[5] got=0b2 expected=0be
-# ERROR cycle=3989 case=4 (random_gap_ready): window frame=0 line=0 beat=3: 1 positions wrong, first lane=0 win[6] got=154 expected=29a
-# ERROR cycle=3991 case=4 (random_gap_ready): window frame=0 line=0 beat=5: 2 positions wrong, first lane=0 win[5] got=396 expected=282
-# ERROR cycle=3993 case=4 (random_gap_ready): window frame=0 line=0 beat=6: 3 positions wrong, first lane=0 win[5] got=282 expected=28e
-# ERROR cycle=3997 case=4: more errors in this case, counted but not printed
-# ========== CASE 4 random_gap_ready FAIL (149 errors) ==========
+# ========== CASE 4 random_gap_ready PASS (0 errors) ==========
 # ========== CASE 5 random_gap_random_ready BEGIN ==========
-# ERROR cycle=5119 case=5 (random_gap_random_ready): window frame=0 line=0 beat=0: 2 positions wrong, first lane=0 win[5] got=1ea expected=1e6
-# ERROR cycle=5123 case=5 (random_gap_random_ready): window frame=0 line=0 beat=1: 1 positions wrong, first lane=0 win[6] got=0bc expected=3c2
-# ERROR cycle=5130 case=5 (random_gap_random_ready): window frame=0 line=0 beat=5: 2 positions wrong, first lane=0 win[5] got=3d6 expected=2c2
-# ERROR cycle=5132 case=5 (random_gap_random_ready): window frame=0 line=0 beat=6: 1 positions wrong, first lane=0 win[6] got=07b expected=1fe
-# ERROR cycle=5133 case=5 (random_gap_random_ready): window frame=0 line=0 beat=7: 2 positions wrong, first lane=0 win[5] got=2ce expected=18a
-# ERROR cycle=5135 case=5 (random_gap_random_ready): window frame=0 line=0 beat=8: 3 positions wrong, first lane=0 win[5] got=18a expected=186
-# ERROR cycle=5137 case=5: more errors in this case, counted but not printed
-# ========== CASE 5 random_gap_random_ready FAIL (156 errors) ==========
+# ========== CASE 5 random_gap_random_ready PASS (0 errors) ==========
 # ========== CASE 6 cont_valid_after_gap BEGIN ==========
 # ========== CASE 6 cont_valid_after_gap PASS (0 errors) ==========
 # ========== SUMMARY TAP=1 PIX=10 UW=4 LINE_BEATS=16 HEIGHT=6 SEED=4e4f5609 ==========
 # 0 cont_valid_ready                   PASS sent=288 received=288 gaps=0 errors=0
 # 1 cont_valid_random_ready            PASS sent=288 received=288 gaps=0 errors=0
-# 2 one_gap_mid_line                   FAIL sent=288 received=288 gaps=18 errors=30
-#     wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
-# 3 one_gap_before_last_beat           FAIL sent=288 received=288 gaps=18 errors=36
-#     wrong positions per window index 0..8: 0 15 15 / 0 15 15 / 15 0 15
-# 4 random_gap_ready                   FAIL sent=288 received=288 gaps=238 errors=149
-#     wrong positions per window index 0..8: 0 7 68 / 0 5 88 / 88 0 88
-# 5 random_gap_random_ready            FAIL sent=288 received=288 gaps=235 errors=156
-#     wrong positions per window index 0..8: 0 8 76 / 0 7 90 / 90 0 90
+# 2 one_gap_mid_line                   PASS sent=288 received=288 gaps=18 errors=0
+# 3 one_gap_before_last_beat           PASS sent=288 received=288 gaps=18 errors=0
+# 4 random_gap_ready                   PASS sent=288 received=288 gaps=238 errors=0
+# 5 random_gap_random_ready            PASS sent=288 received=288 gaps=235 errors=0
 # 6 cont_valid_after_gap               PASS sent=288 received=288 gaps=0 errors=0
-# TEST FAILED
-# ** Fatal: scoreboard errors=371
-#    Time: 52062500 ps  Scope: tb_matrix_3x3_gen File: B:/fpga/work_space_claude/isp_color_bench/tb/tb_matrix_3x3_gen.sv Line: 383
-# ** Note: $finish    : B:/fpga/work_space_claude/isp_color_bench/tb/tb_matrix_3x3_gen.sv(383)
-#    Time: 52062500 ps  Iteration: 1  Instance: /tb_matrix_3x3_gen
-# Break in Module tb_matrix_3x3_gen at B:/fpga/work_space_claude/isp_color_bench/tb/tb_matrix_3x3_gen.sv line 383
-# End time: 11:27:20 on Nov 12,2026, Elapsed time: 0:00:02
-# Errors: 1, Warnings: 1
+# TEST PASSED
+# ** Note: $finish    : B:/fpga/work_space_claude/isp_color_bench/tb/tb_matrix_3x3_gen.sv(387)
+#    Time: 57781500 ps  Iteration: 1  Instance: /tb_matrix_3x3_gen
+# Break in Module tb_matrix_3x3_gen at B:/fpga/work_space_claude/isp_color_bench/tb/tb_matrix_3x3_gen.sv line 387
+# End time: 12:17:53 on Nov 12,2026, Elapsed time: 0:00:02
+# Errors: 0, Warnings: 1

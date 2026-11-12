@@ -11,7 +11,7 @@ module tb_matrix_3x3_gen #(
     parameter integer  PIX        = 10  ,//bits per pixel
     parameter integer  UW         = 4   ,//0:SOF 1:SOL 2:EOL 3:EOF
     parameter integer  LINE_BEATS = 8   ,//beats per line, at least 4
-    parameter integer  HEIGHT     = 6   ,//lines per frame, at least 3
+    parameter integer  HEIGHT     = 6   ,//lines per frame                
     parameter integer  LINE_GAP   = 16  ,//unit: enabled clocks between two lines
     parameter integer  LINE_MAX   = 2048,//unit: pixels, DUT line buffer depth
     parameter realtime PIXEL_HALF = 3.5

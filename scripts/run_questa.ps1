@@ -24,7 +24,7 @@ $compileLog = Join-Path $logRoot 'compile.log'
 # matrix_3x3_gen includes "./../define_isp.sv", so its own directory is an include directory too.
 & (Join-Path $QuestaBin 'vlog.exe') -sv -svinputport=net -work $library '+define+SIMULATION' `
     "+incdir+$rtl" "+incdir+$rtl/matrix_3x3_gen" `
-    "$rtl/ip/ram/two_port_ram_isp.sv" "$rtl/matrix_3x3_gen/matrix_3x3_gen.sv" `
+    "$rtl/ip/fifo/isp_dc_fifo.sv" "$rtl/matrix_3x3_gen/matrix_3x3_gen.sv" `
     "$tb/tb_matrix_3x3_gen.sv" 2>&1 |
     Tee-Object -FilePath $compileLog
 if ($LASTEXITCODE -ne 0) { throw 'RTL/TB compile failed' }
@@ -34,7 +34,12 @@ $runs = @(
     @{ Name='matrix_tap8'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=8','-gPIX=10','-gLINE_BEATS=8');  Cases=7 },
     @{ Name='matrix_tap4'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=4','-gPIX=10','-gLINE_BEATS=8');  Cases=7 },
     @{ Name='matrix_tap2'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=2','-gPIX=10','-gLINE_BEATS=8');  Cases=7 },
-    @{ Name='matrix_tap1'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=1','-gPIX=10','-gLINE_BEATS=16'); Cases=7 }
+    @{ Name='matrix_tap1'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=1','-gPIX=10','-gLINE_BEATS=16'); Cases=7 },
+    @{ Name='matrix_gap0'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=4','-gPIX=12','-gLINE_GAP=0');    Cases=7 },
+    @{ Name='matrix_gap1'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=2','-gPIX=8','-gLINE_GAP=1');     Cases=7 },
+    @{ Name='matrix_h2';   Top='tb_matrix_3x3_gen'; Args=@('-gTAP=8','-gPIX=10','-gHEIGHT=2');      Cases=7 },
+    @{ Name='matrix_h1';   Top='tb_matrix_3x3_gen'; Args=@('-gTAP=4','-gPIX=10','-gHEIGHT=1');      Cases=7 },
+    @{ Name='matrix_full'; Top='tb_matrix_3x3_gen'; Args=@('-gTAP=8','-gPIX=10','-gLINE_BEATS=32','-gLINE_MAX=256'); Cases=7 }
 )
 
 # All runs are executed even when one fails, the summary lists every case of every run.

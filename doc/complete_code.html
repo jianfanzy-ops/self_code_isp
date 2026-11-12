@@ -1,13 +1,260 @@
 <!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>matrix_3x3_gen 仿真完整代码</title><style>body{margin:0;background:#f3f5f7;color:#18212d;font:15px/1.6 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1400px;padding:24px;margin:auto}h1{margin:0 0 8px;font-size:27px}h2{font-size:18px}nav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}a{color:#155ca7}nav a{padding:5px 10px;background:white;border:1px solid #cbd4df;border-radius:6px;text-decoration:none}section{background:white;padding:14px 18px;margin:20px 0;border:1px solid #d7dfe7;border-radius:8px;scroll-margin-top:12px}pre{max-height:560px;overflow:auto;background:#101922;color:#e3eaf2;padding:16px;border-radius:6px;white-space:pre;tab-size:4;font:13px/1.5 Consolas,"Cascadia Code",monospace}pre:focus{outline:2px solid #468fe0}.fail{color:#a32222;font-weight:650}p{margin:8px 0}</style><main><h1>matrix_3x3_gen · 仿真完整代码</h1>
-<p>每个代码框是完整文件，高度固定，可滚轮及横向查看。RTL 未修改。</p>
-<p class="fail">Questa 2024.1：4 组配置中，tvalid 连续的 3 个用例全部 PASS，tvalid 不连续的 4 个用例全部 FAIL（问题已复现）。</p><nav>
-<a href="#f0">tb/tb_matrix_3x3_gen.sv</a>
-<a href="#f1">scripts/run_questa.ps1</a>
-<a href="#f2">scripts/run_questa.bat</a>
-<a href="#f3">scripts/logs/summary.txt</a>
+<title>matrix_3x3_gen 完整代码</title><style>body{margin:0;background:#f3f5f7;color:#18212d;font:15px/1.6 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1400px;padding:24px;margin:auto}h1{margin:0 0 8px;font-size:27px}h2{font-size:18px}nav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}a{color:#155ca7}nav a{padding:5px 10px;background:white;border:1px solid #cbd4df;border-radius:6px;text-decoration:none}section{background:white;padding:14px 18px;margin:20px 0;border:1px solid #d7dfe7;border-radius:8px;scroll-margin-top:12px}pre{max-height:560px;overflow:auto;background:#101922;color:#e3eaf2;padding:16px;border-radius:6px;white-space:pre;tab-size:4;font:13px/1.5 Consolas,"Cascadia Code",monospace}pre:focus{outline:2px solid #468fe0}.pass{color:#16683d;font-weight:650}p{margin:8px 0}</style><main><h1>matrix_3x3_gen · 完整代码</h1>
+<p>每个代码框是完整文件，高度固定，可滚轮及横向查看。isp_dc_fifo 原样取自 skill，放在 rtl/ip/fifo。</p>
+<p class="pass">Questa 2024.1：9 组配置 × 7 个用例全部 PASS。修改前的失败日志见 git 首个提交。</p><nav>
+<a href="#f0">rtl/matrix_3x3_gen/matrix_3x3_gen.sv</a>
+<a href="#f1">tb/tb_matrix_3x3_gen.sv</a>
+<a href="#f2">scripts/run_questa.ps1</a>
+<a href="#f3">scripts/run_questa.bat</a>
+<a href="#f4">scripts/logs/summary.txt</a>
 </nav>
-<section id="f0"><h2>tb/tb_matrix_3x3_gen.sv</h2><p>自检 TB，7 个用例一次跑完</p><pre tabindex="0">`timescale 1ns/1ps
+<section id="f0"><h2>rtl/matrix_3x3_gen/matrix_3x3_gen.sv</h2><p>修改后的模块：两级行 FIFO，只在握手拍推进</p><pre tabindex="0">`timescale 1ns/1ps
+//matrix_3x3_gen: two line FIFOs build the 3x3 window of every pixel, tvalid / tuser belong to the window center [4].
+//A beat moves only on a handshake, so tvalid may be discontinuous. The last line is flushed after EOF.
+module matrix_3x3_gen #(
+    parameter PIXEL_WIDTH           = 10  ,//bits per pixel
+    parameter PIXEL_TAP_NUM         = 8   ,//pixels per beat
+    parameter PIXEL_AXIS_USER_WIDTH = 4   ,//0:SOF 1:SOL 2:EOL 3:EOF, higher bits: module flags
+    parameter PIXEL_LINE_WIDTH_MAX  = 2048 //unit: pixels, line buffer depth
+)(
+    input  logic                                            i_pixel_clk         ,
+    input  logic                                            i_pixel_rst_n       ,//active-low
+    // configuration, not used: line width and frame height follow tuser
+    input  logic [15:0]                                     i_x_width           ,//unit: pixels
+    input  logic [15:0]                                     i_y_height          ,//unit: lines
+    // input stream
+    input  logic                                            i_s_axis_tvalid     ,
+    output logic                                            o_s_axis_tready     ,
+    input  logic [PIXEL_TAP_NUM-1:0][PIXEL_WIDTH-1:0]       i_s_axis_tdata      ,//new pixel in the high bits
+    input  logic [PIXEL_AXIS_USER_WIDTH-1:0]                i_s_axis_tuser      ,
+    // output stream
+    output logic                                            o_m_axis_tvalid = 0 ,
+    input  logic                                            i_m_axis_tready     ,
+    output logic [PIXEL_TAP_NUM-1:0][8:0][PIXEL_WIDTH-1:0]  o_m_axis_tdata  = 0 ,//0 1 2 / 3 4 5 / 6 7 8, 4 = center
+    output logic [PIXEL_AXIS_USER_WIDTH-1:0]                o_m_axis_tuser  = 0
+);
+
+    `include &quot;./../define_isp.sv&quot;
+
+    localparam DATA_WIDTH = PIXEL_TAP_NUM*PIXEL_WIDTH;
+    localparam FIFO_DEPTH = PIXEL_LINE_WIDTH_MAX/PIXEL_TAP_NUM + 16;//unit: beats, one line plus margin for the full flag delay
+
+    // step: one beat enters the window, from the input or from the flush of the last line
+    logic                                            s_axis_hs            ;
+    logic                                            fifo_ready           ;
+    logic                                            flush_step           ;
+    logic                                            step                 ;
+
+    // line count and flush of the last line
+    logic [1:0]                                      line_cnt        = 0  ;//lines received in this frame, saturates at 2
+    logic                                            line1_en             ;//center line is in FIFO 1
+    logic                                            line2_en             ;//line above the center is in FIFO 2
+    logic                                            end_stream_flag = 0  ;//EOF received, last line is being flushed
+    logic [15:0]                                     line_gap_cnt    = 0  ;//unit: enabled clocks since the last EOL
+    logic [15:0]                                     line_gap        = 0  ;//line gap of the input
+    logic                                            flush_gap_done       ;
+
+    // line FIFO 1: previous line with its tuser, the window center
+    logic                                            line1_fifo_wr_en     ;
+    logic                                            line1_fifo_wr_full   ;
+    logic                                            line1_fifo_rd_en     ;
+    logic                                            line1_fifo_rd_empty  ;
+    logic [PIXEL_AXIS_USER_WIDTH+DATA_WIDTH-1:0]     line1_fifo_rd_data   ;
+    logic [PIXEL_AXIS_USER_WIDTH-1:0]                line1_tuser          ;
+    logic [PIXEL_TAP_NUM-1:0][PIXEL_WIDTH-1:0]       line1_tdata          ;
+
+    // line FIFO 2: the line before the previous line
+    logic                                            line2_fifo_wr_en     ;
+    logic                                            line2_fifo_wr_full   ;
+    logic                                            line2_fifo_rd_en     ;
+    logic                                            line2_fifo_rd_empty  ;
+    logic [PIXEL_TAP_NUM-1:0][PIXEL_WIDTH-1:0]       line2_tdata          ;
+
+    // window columns: cur = beat of the center, prev = last pixel of the beat before it
+    logic                                            cur_tvalid      = 0  ;
+    logic [PIXEL_AXIS_USER_WIDTH-1:0]                cur_tuser       = 0  ;
+    logic [PIXEL_TAP_NUM-1:0][PIXEL_WIDTH-1:0]       cur_line0_tdata = 0  ;
+    logic [PIXEL_TAP_NUM-1:0][PIXEL_WIDTH-1:0]       cur_line1_tdata = 0  ;
+    logic [PIXEL_TAP_NUM-1:0][PIXEL_WIDTH-1:0]       cur_line2_tdata = 0  ;
+    logic [PIXEL_WIDTH-1:0]                          prev_line0_pixel = 0 ;
+    logic [PIXEL_WIDTH-1:0]                          prev_line1_pixel = 0 ;
+    logic [PIXEL_WIDTH-1:0]                          prev_line2_pixel = 0 ;
+
+    // 3x3 window: {first pixel of the next beat, cur, prev}, pixel i of cur is at [i+1]
+    logic                                            matrix_3x3_tvalid    ;
+    logic [PIXEL_TAP_NUM+1:0][PIXEL_WIDTH-1:0]       matrix_line0_tdata   ;
+    logic [PIXEL_TAP_NUM+1:0][PIXEL_WIDTH-1:0]       matrix_line1_tdata   ;
+    logic [PIXEL_TAP_NUM+1:0][PIXEL_WIDTH-1:0]       matrix_line2_tdata   ;
+
+    //--------------------------------------------------------------------------
+    // step
+    //--------------------------------------------------------------------------
+    assign line1_en        = line_cnt != 0;
+    assign line2_en        = line_cnt[1];
+    assign fifo_ready      = (~line1_en | ~line1_fifo_rd_empty) &amp; (~line2_en | ~line2_fifo_rd_empty)
+                           &amp; ~line1_fifo_wr_full &amp; ~line2_fifo_wr_full;
+    //no input while the last line is flushed
+    assign o_s_axis_tready = i_m_axis_tready &amp; fifo_ready &amp; ~end_stream_flag;
+    assign s_axis_hs       = i_s_axis_tvalid &amp; o_s_axis_tready;
+    assign flush_step      = i_m_axis_tready &amp; fifo_ready &amp; end_stream_flag &amp; flush_gap_done;
+    assign step            = s_axis_hs | flush_step;
+
+    //--------------------------------------------------------------------------
+    // line count and flush of the last line
+    //--------------------------------------------------------------------------
+    always @ (posedge i_pixel_clk) begin
+        if(~i_pixel_rst_n) begin
+            line_cnt        &lt;= &#x27;0;
+            end_stream_flag &lt;= 1&#x27;b0;
+        end
+        else if(flush_step) begin
+            if(line1_tuser[`EOL]) begin
+                line_cnt        &lt;= &#x27;0;
+                end_stream_flag &lt;= 1&#x27;b0;
+            end
+        end
+        else if(s_axis_hs &amp; `i_eol) begin
+            if(~line_cnt[1])
+                line_cnt &lt;= line_cnt + 1&#x27;b1;
+            if(`i_eof)
+                end_stream_flag &lt;= 1&#x27;b1;
+        end
+    end
+
+    //the flushed line starts after the same line gap as the input lines
+    always @ (posedge i_pixel_clk) begin
+        if(~i_pixel_rst_n) begin
+            line_gap_cnt &lt;= &#x27;0;
+            line_gap     &lt;= &#x27;0;
+        end
+        else if(i_m_axis_tready) begin
+            if(s_axis_hs &amp; `i_eol)
+                line_gap_cnt &lt;= &#x27;0;
+            else if(~(&amp;line_gap_cnt))
+                line_gap_cnt &lt;= line_gap_cnt + 1&#x27;b1;
+            if(s_axis_hs &amp; `i_sol &amp; ~`i_sof)
+                line_gap &lt;= line_gap_cnt;
+        end
+    end
+
+    assign flush_gap_done = line_gap_cnt &gt;= line_gap;
+
+    //--------------------------------------------------------------------------
+    // line FIFOs, read and written only on a step
+    //--------------------------------------------------------------------------
+    assign line1_fifo_wr_en = s_axis_hs;
+    assign line1_fifo_rd_en = step &amp; line1_en;
+    assign line2_fifo_wr_en = s_axis_hs &amp; line1_en;
+    assign line2_fifo_rd_en = step &amp; line2_en;
+
+    assign {line1_tuser, line1_tdata} = line1_fifo_rd_data;
+
+    isp_dc_fifo #(
+        .FIFO_MODE   (&quot;ShowAhead&quot;                          ),
+        .DATA_WIDTH  (PIXEL_AXIS_USER_WIDTH+DATA_WIDTH     ),
+        .FIFO_DEPTH  (FIFO_DEPTH                           )
+    ) u_line1_fifo (
+        .Reset       (~i_pixel_rst_n                       ), //System Reset
+        .WrClk       (i_pixel_clk                          ), //(I)Write Clock
+        .WrEn        (line1_fifo_wr_en                     ), //(I)Write Enable
+        .WrData      ({i_s_axis_tuser, i_s_axis_tdata}     ), //(I)Write Data
+        .WrDNum      (                                     ), //(O)Write Data Number In Fifo
+        .WrFull      (line1_fifo_wr_full                   ), //(O)Write Full
+        .RdClk       (i_pixel_clk                          ), //(I)Read Clock
+        .RdEn        (line1_fifo_rd_en                     ), //(I)Read Enable
+        .RdData      (line1_fifo_rd_data                   ), //(O)Read Data
+        .DataVal     (                                     ), //(O)Data Valid
+        .RdDNum      (                                     ), //(O)Read Data Number In Fifo
+        .RdEmpty     (line1_fifo_rd_empty                  )  //(O)Read FifoEmpty
+    );
+
+    isp_dc_fifo #(
+        .FIFO_MODE   (&quot;ShowAhead&quot;                          ),
+        .DATA_WIDTH  (DATA_WIDTH                           ),
+        .FIFO_DEPTH  (FIFO_DEPTH                           )
+    ) u_line2_fifo (
+        .Reset       (~i_pixel_rst_n                       ), //System Reset
+        .WrClk       (i_pixel_clk                          ), //(I)Write Clock
+        .WrEn        (line2_fifo_wr_en                     ), //(I)Write Enable
+        .WrData      (line1_tdata                          ), //(I)Write Data
+        .WrDNum      (                                     ), //(O)Write Data Number In Fifo
+        .WrFull      (line2_fifo_wr_full                   ), //(O)Write Full
+        .RdClk       (i_pixel_clk                          ), //(I)Read Clock
+        .RdEn        (line2_fifo_rd_en                     ), //(I)Read Enable
+        .RdData      (line2_tdata                          ), //(O)Read Data
+        .DataVal     (                                     ), //(O)Data Valid
+        .RdDNum      (                                     ), //(O)Read Data Number In Fifo
+        .RdEmpty     (line2_fifo_rd_empty                  )  //(O)Read FifoEmpty
+    );
+
+    //--------------------------------------------------------------------------
+    //1: window columns, line0 = input line, line1 = center line, line2 = line above
+    //--------------------------------------------------------------------------
+    always @ (posedge i_pixel_clk) begin
+        if(~i_pixel_rst_n)
+            cur_tvalid &lt;= 1&#x27;b0;
+        else if(step)
+            cur_tvalid &lt;= line1_en;
+        else if(i_m_axis_tready &amp; cur_tuser[`EOL])
+            cur_tvalid &lt;= 1&#x27;b0;
+    end
+
+    always @ (posedge i_pixel_clk) begin
+        if(step) begin
+            cur_tuser       &lt;= line1_tuser;
+            cur_line0_tdata &lt;= i_s_axis_tdata;
+            cur_line1_tdata &lt;= line1_tdata;
+            cur_line2_tdata &lt;= line2_tdata;
+        end
+    end
+
+    //the center beat leaves when the next beat arrives, the last beat of a line leaves at once
+    assign matrix_3x3_tvalid = cur_tvalid &amp; (step | cur_tuser[`EOL]);
+
+    always @ (posedge i_pixel_clk) begin
+        if(i_m_axis_tready &amp; matrix_3x3_tvalid) begin
+            prev_line0_pixel &lt;= cur_line0_tdata[PIXEL_TAP_NUM-1];
+            prev_line1_pixel &lt;= cur_line1_tdata[PIXEL_TAP_NUM-1];
+            prev_line2_pixel &lt;= cur_line2_tdata[PIXEL_TAP_NUM-1];
+        end
+    end
+
+    assign matrix_line0_tdata = {i_s_axis_tdata[0], cur_line0_tdata, prev_line0_pixel};
+    assign matrix_line1_tdata = {line1_tdata[0]   , cur_line1_tdata, prev_line1_pixel};
+    assign matrix_line2_tdata = {line2_tdata[0]   , cur_line2_tdata, prev_line2_pixel};
+
+    //--------------------------------------------------------------------------
+    //1+1: output register
+    //--------------------------------------------------------------------------
+    always @ (posedge i_pixel_clk) begin
+        if(~i_pixel_rst_n)
+            o_m_axis_tvalid &lt;= 1&#x27;b0;
+        else if(i_m_axis_tready)
+            o_m_axis_tvalid &lt;= matrix_3x3_tvalid;
+    end
+
+    always @ (posedge i_pixel_clk) begin
+        if(i_m_axis_tready) begin
+            o_m_axis_tuser &lt;= cur_tuser;
+            for(int i=0;i&lt;PIXEL_TAP_NUM;i++) begin
+                o_m_axis_tdata[i][0] &lt;= matrix_line2_tdata[i]  ;
+                o_m_axis_tdata[i][1] &lt;= matrix_line2_tdata[i+1];
+                o_m_axis_tdata[i][2] &lt;= matrix_line2_tdata[i+2];
+                o_m_axis_tdata[i][3] &lt;= matrix_line1_tdata[i]  ;
+                o_m_axis_tdata[i][4] &lt;= matrix_line1_tdata[i+1];
+                o_m_axis_tdata[i][5] &lt;= matrix_line1_tdata[i+2];
+                o_m_axis_tdata[i][6] &lt;= matrix_line0_tdata[i]  ;
+                o_m_axis_tdata[i][7] &lt;= matrix_line0_tdata[i+1];
+                o_m_axis_tdata[i][8] &lt;= matrix_line0_tdata[i+2];
+            end
+        end
+    end
+
+    //////////////debug///////////////////
+
+endmodule
+</pre></section>
+<section id="f1"><h2>tb/tb_matrix_3x3_gen.sv</h2><p>自检 TB，7 个用例一次跑完</p><pre tabindex="0">`timescale 1ns/1ps
 
 //==============================================================================
 // tb_matrix_3x3_gen: complete self-checking regression, all cases run automatically.
@@ -20,7 +267,7 @@ module tb_matrix_3x3_gen #(
     parameter integer  PIX        = 10  ,//bits per pixel
     parameter integer  UW         = 4   ,//0:SOF 1:SOL 2:EOL 3:EOF
     parameter integer  LINE_BEATS = 8   ,//beats per line, at least 4
-    parameter integer  HEIGHT     = 6   ,//lines per frame, at least 3
+    parameter integer  HEIGHT     = 6   ,//lines per frame                
     parameter integer  LINE_GAP   = 16  ,//unit: enabled clocks between two lines
     parameter integer  LINE_MAX   = 2048,//unit: pixels, DUT line buffer depth
     parameter realtime PIXEL_HALF = 3.5
@@ -445,7 +692,7 @@ module tb_matrix_3x3_gen #(
 
 endmodule
 </pre></section>
-<section id="f1"><h2>scripts/run_questa.ps1</h2><p>Questa 回归脚本，TAP=8/4/2/1 四组配置</p><pre tabindex="0">param(
+<section id="f2"><h2>scripts/run_questa.ps1</h2><p>Questa 回归脚本，9 组配置</p><pre tabindex="0">param(
     [string]$QuestaBin = &#x27;A:\software\Questa\questa24.1\win64&#x27;,
     [switch]$Waves
 )
@@ -471,7 +718,7 @@ $compileLog = Join-Path $logRoot &#x27;compile.log&#x27;
 # matrix_3x3_gen includes &quot;./../define_isp.sv&quot;, so its own directory is an include directory too.
 &amp; (Join-Path $QuestaBin &#x27;vlog.exe&#x27;) -sv -svinputport=net -work $library &#x27;+define+SIMULATION&#x27; `
     &quot;+incdir+$rtl&quot; &quot;+incdir+$rtl/matrix_3x3_gen&quot; `
-    &quot;$rtl/ip/ram/two_port_ram_isp.sv&quot; &quot;$rtl/matrix_3x3_gen/matrix_3x3_gen.sv&quot; `
+    &quot;$rtl/ip/fifo/isp_dc_fifo.sv&quot; &quot;$rtl/matrix_3x3_gen/matrix_3x3_gen.sv&quot; `
     &quot;$tb/tb_matrix_3x3_gen.sv&quot; 2&gt;&amp;1 |
     Tee-Object -FilePath $compileLog
 if ($LASTEXITCODE -ne 0) { throw &#x27;RTL/TB compile failed&#x27; }
@@ -481,7 +728,12 @@ $runs = @(
     @{ Name=&#x27;matrix_tap8&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=8&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gLINE_BEATS=8&#x27;);  Cases=7 },
     @{ Name=&#x27;matrix_tap4&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=4&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gLINE_BEATS=8&#x27;);  Cases=7 },
     @{ Name=&#x27;matrix_tap2&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=2&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gLINE_BEATS=8&#x27;);  Cases=7 },
-    @{ Name=&#x27;matrix_tap1&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=1&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gLINE_BEATS=16&#x27;); Cases=7 }
+    @{ Name=&#x27;matrix_tap1&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=1&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gLINE_BEATS=16&#x27;); Cases=7 },
+    @{ Name=&#x27;matrix_gap0&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=4&#x27;,&#x27;-gPIX=12&#x27;,&#x27;-gLINE_GAP=0&#x27;);    Cases=7 },
+    @{ Name=&#x27;matrix_gap1&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=2&#x27;,&#x27;-gPIX=8&#x27;,&#x27;-gLINE_GAP=1&#x27;);     Cases=7 },
+    @{ Name=&#x27;matrix_h2&#x27;;   Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=8&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gHEIGHT=2&#x27;);      Cases=7 },
+    @{ Name=&#x27;matrix_h1&#x27;;   Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=4&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gHEIGHT=1&#x27;);      Cases=7 },
+    @{ Name=&#x27;matrix_full&#x27;; Top=&#x27;tb_matrix_3x3_gen&#x27;; Args=@(&#x27;-gTAP=8&#x27;,&#x27;-gPIX=10&#x27;,&#x27;-gLINE_BEATS=32&#x27;,&#x27;-gLINE_MAX=256&#x27;); Cases=7 }
 )
 
 # All runs are executed even when one fails, the summary lists every case of every run.
@@ -519,7 +771,7 @@ $summary | Set-Content -LiteralPath (Join-Path $logRoot &#x27;summary.txt&#x27;)
 Write-Output $summary
 if ($failed -ne 0) { exit 1 }
 </pre></section>
-<section id="f2"><h2>scripts/run_questa.bat</h2><p>双击启动，同 example_run.bat</p><pre tabindex="0">@echo off
+<section id="f3"><h2>scripts/run_questa.bat</h2><p>双击启动，同 example_run.bat</p><pre tabindex="0">@echo off
 setlocal
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;%~dp0run_questa.ps1&quot; %*
 set &quot;SIM_EXIT=%ERRORLEVEL%&quot;
@@ -528,64 +780,93 @@ if not &quot;%SIM_EXIT%&quot;==&quot;0&quot; echo Questa regression FAILED.
 pause
 exit /b %SIM_EXIT%
 </pre></section>
-<section id="f3"><h2>scripts/logs/summary.txt</h2><p>本次仿真汇总（原始 RTL）</p><pre tabindex="0">[matrix_tap8]
+<section id="f4"><h2>scripts/logs/summary.txt</h2><p>本次仿真汇总（修改后 RTL）</p><pre tabindex="0">[matrix_tap8]
 0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
 1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
-2 one_gap_mid_line                   FAIL sent=144 received=144 gaps=18 errors=30
-    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
-3 one_gap_before_last_beat           FAIL sent=144 received=144 gaps=18 errors=36
-    wrong positions per window index 0..8: 105 120 120 / 105 120 120 / 15 0 15
-4 random_gap_ready                   FAIL sent=144 received=144 gaps=117 errors=66
-    wrong positions per window index 0..8: 28 32 63 / 14 16 52 / 38 0 38
-5 random_gap_random_ready            FAIL sent=144 received=144 gaps=109 errors=75
-    wrong positions per window index 0..8: 49 56 85 / 28 32 69 / 41 0 41
+2 one_gap_mid_line                   PASS sent=144 received=144 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=144 received=144 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=144 received=144 gaps=117 errors=0
+5 random_gap_random_ready            PASS sent=144 received=144 gaps=109 errors=0
 6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
 [matrix_tap4]
 0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
 1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
-2 one_gap_mid_line                   FAIL sent=144 received=144 gaps=18 errors=30
-    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
-3 one_gap_before_last_beat           FAIL sent=144 received=144 gaps=18 errors=36
-    wrong positions per window index 0..8: 45 60 60 / 45 60 60 / 15 0 15
-4 random_gap_ready                   FAIL sent=144 received=144 gaps=117 errors=66
-    wrong positions per window index 0..8: 12 16 47 / 6 8 44 / 38 0 38
-5 random_gap_random_ready            FAIL sent=144 received=144 gaps=109 errors=75
-    wrong positions per window index 0..8: 21 28 57 / 12 16 53 / 41 0 41
+2 one_gap_mid_line                   PASS sent=144 received=144 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=144 received=144 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=144 received=144 gaps=117 errors=0
+5 random_gap_random_ready            PASS sent=144 received=144 gaps=109 errors=0
 6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
 [matrix_tap2]
 0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
 1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
-2 one_gap_mid_line                   FAIL sent=144 received=144 gaps=18 errors=30
-    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
-3 one_gap_before_last_beat           FAIL sent=144 received=144 gaps=18 errors=36
-    wrong positions per window index 0..8: 15 30 30 / 15 30 30 / 15 0 15
-4 random_gap_ready                   FAIL sent=144 received=144 gaps=117 errors=66
-    wrong positions per window index 0..8: 4 8 39 / 2 4 40 / 38 0 38
-5 random_gap_random_ready            FAIL sent=144 received=144 gaps=109 errors=75
-    wrong positions per window index 0..8: 7 14 43 / 4 8 45 / 41 0 41
+2 one_gap_mid_line                   PASS sent=144 received=144 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=144 received=144 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=144 received=144 gaps=117 errors=0
+5 random_gap_random_ready            PASS sent=144 received=144 gaps=109 errors=0
 6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
 [matrix_tap1]
 0 cont_valid_ready                   PASS sent=288 received=288 gaps=0 errors=0
 1 cont_valid_random_ready            PASS sent=288 received=288 gaps=0 errors=0
-2 one_gap_mid_line                   FAIL sent=288 received=288 gaps=18 errors=30
-    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
-3 one_gap_before_last_beat           FAIL sent=288 received=288 gaps=18 errors=36
-    wrong positions per window index 0..8: 0 15 15 / 0 15 15 / 15 0 15
-4 random_gap_ready                   FAIL sent=288 received=288 gaps=238 errors=149
-    wrong positions per window index 0..8: 0 7 68 / 0 5 88 / 88 0 88
-5 random_gap_random_ready            FAIL sent=288 received=288 gaps=235 errors=156
-    wrong positions per window index 0..8: 0 8 76 / 0 7 90 / 90 0 90
+2 one_gap_mid_line                   PASS sent=288 received=288 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=288 received=288 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=288 received=288 gaps=238 errors=0
+5 random_gap_random_ready            PASS sent=288 received=288 gaps=235 errors=0
 6 cont_valid_after_gap               PASS sent=288 received=288 gaps=0 errors=0
+[matrix_gap0]
+0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
+2 one_gap_mid_line                   PASS sent=144 received=144 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=144 received=144 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=144 received=144 gaps=105 errors=0
+5 random_gap_random_ready            PASS sent=144 received=144 gaps=112 errors=0
+6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
+[matrix_gap1]
+0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
+2 one_gap_mid_line                   PASS sent=144 received=144 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=144 received=144 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=144 received=144 gaps=93 errors=0
+5 random_gap_random_ready            PASS sent=144 received=144 gaps=100 errors=0
+6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
+[matrix_h2]
+0 cont_valid_ready                   PASS sent=48 received=48 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=48 received=48 gaps=0 errors=0
+2 one_gap_mid_line                   PASS sent=48 received=48 gaps=6 errors=0
+3 one_gap_before_last_beat           PASS sent=48 received=48 gaps=6 errors=0
+4 random_gap_ready                   PASS sent=48 received=48 gaps=36 errors=0
+5 random_gap_random_ready            PASS sent=48 received=48 gaps=39 errors=0
+6 cont_valid_after_gap               PASS sent=48 received=48 gaps=0 errors=0
+[matrix_h1]
+0 cont_valid_ready                   PASS sent=24 received=24 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=24 received=24 gaps=0 errors=0
+2 one_gap_mid_line                   PASS sent=24 received=24 gaps=3 errors=0
+3 one_gap_before_last_beat           PASS sent=24 received=24 gaps=3 errors=0
+4 random_gap_ready                   PASS sent=24 received=24 gaps=11 errors=0
+5 random_gap_random_ready            PASS sent=24 received=24 gaps=18 errors=0
+6 cont_valid_after_gap               PASS sent=24 received=24 gaps=0 errors=0
+[matrix_full]
+0 cont_valid_ready                   PASS sent=576 received=576 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=576 received=576 gaps=0 errors=0
+2 one_gap_mid_line                   PASS sent=576 received=576 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=576 received=576 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=576 received=576 gaps=434 errors=0
+5 random_gap_random_ready            PASS sent=576 received=576 gaps=451 errors=0
+6 cont_valid_after_gap               PASS sent=576 received=576 gaps=0 errors=0
 
 Run         Top               Cases Expected Result
 ---         ---               ----- -------- ------
-matrix_tap8 tb_matrix_3x3_gen     3        7 FAIL  
-matrix_tap4 tb_matrix_3x3_gen     3        7 FAIL  
-matrix_tap2 tb_matrix_3x3_gen     3        7 FAIL  
-matrix_tap1 tb_matrix_3x3_gen     3        7 FAIL  
+matrix_tap8 tb_matrix_3x3_gen     7        7 PASS  
+matrix_tap4 tb_matrix_3x3_gen     7        7 PASS  
+matrix_tap2 tb_matrix_3x3_gen     7        7 PASS  
+matrix_tap1 tb_matrix_3x3_gen     7        7 PASS  
+matrix_gap0 tb_matrix_3x3_gen     7        7 PASS  
+matrix_gap1 tb_matrix_3x3_gen     7        7 PASS  
+matrix_h2   tb_matrix_3x3_gen     7        7 PASS  
+matrix_h1   tb_matrix_3x3_gen     7        7 PASS  
+matrix_full tb_matrix_3x3_gen     7        7 PASS  
 
 
-TESTS FAILED: 4 of 4 runs.
+ALL TESTS PASSED: 9 runs.
 
 </pre></section>
 </main></html>

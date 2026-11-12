@@ -1,59 +1,88 @@
 ﻿[matrix_tap8]
 0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
 1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
-2 one_gap_mid_line                   FAIL sent=144 received=144 gaps=18 errors=30
-    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
-3 one_gap_before_last_beat           FAIL sent=144 received=144 gaps=18 errors=36
-    wrong positions per window index 0..8: 105 120 120 / 105 120 120 / 15 0 15
-4 random_gap_ready                   FAIL sent=144 received=144 gaps=117 errors=66
-    wrong positions per window index 0..8: 28 32 63 / 14 16 52 / 38 0 38
-5 random_gap_random_ready            FAIL sent=144 received=144 gaps=109 errors=75
-    wrong positions per window index 0..8: 49 56 85 / 28 32 69 / 41 0 41
+2 one_gap_mid_line                   PASS sent=144 received=144 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=144 received=144 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=144 received=144 gaps=117 errors=0
+5 random_gap_random_ready            PASS sent=144 received=144 gaps=109 errors=0
 6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
 [matrix_tap4]
 0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
 1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
-2 one_gap_mid_line                   FAIL sent=144 received=144 gaps=18 errors=30
-    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
-3 one_gap_before_last_beat           FAIL sent=144 received=144 gaps=18 errors=36
-    wrong positions per window index 0..8: 45 60 60 / 45 60 60 / 15 0 15
-4 random_gap_ready                   FAIL sent=144 received=144 gaps=117 errors=66
-    wrong positions per window index 0..8: 12 16 47 / 6 8 44 / 38 0 38
-5 random_gap_random_ready            FAIL sent=144 received=144 gaps=109 errors=75
-    wrong positions per window index 0..8: 21 28 57 / 12 16 53 / 41 0 41
+2 one_gap_mid_line                   PASS sent=144 received=144 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=144 received=144 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=144 received=144 gaps=117 errors=0
+5 random_gap_random_ready            PASS sent=144 received=144 gaps=109 errors=0
 6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
 [matrix_tap2]
 0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
 1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
-2 one_gap_mid_line                   FAIL sent=144 received=144 gaps=18 errors=30
-    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
-3 one_gap_before_last_beat           FAIL sent=144 received=144 gaps=18 errors=36
-    wrong positions per window index 0..8: 15 30 30 / 15 30 30 / 15 0 15
-4 random_gap_ready                   FAIL sent=144 received=144 gaps=117 errors=66
-    wrong positions per window index 0..8: 4 8 39 / 2 4 40 / 38 0 38
-5 random_gap_random_ready            FAIL sent=144 received=144 gaps=109 errors=75
-    wrong positions per window index 0..8: 7 14 43 / 4 8 45 / 41 0 41
+2 one_gap_mid_line                   PASS sent=144 received=144 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=144 received=144 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=144 received=144 gaps=117 errors=0
+5 random_gap_random_ready            PASS sent=144 received=144 gaps=109 errors=0
 6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
 [matrix_tap1]
 0 cont_valid_ready                   PASS sent=288 received=288 gaps=0 errors=0
 1 cont_valid_random_ready            PASS sent=288 received=288 gaps=0 errors=0
-2 one_gap_mid_line                   FAIL sent=288 received=288 gaps=18 errors=30
-    wrong positions per window index 0..8: 0 0 12 / 0 0 15 / 15 0 15
-3 one_gap_before_last_beat           FAIL sent=288 received=288 gaps=18 errors=36
-    wrong positions per window index 0..8: 0 15 15 / 0 15 15 / 15 0 15
-4 random_gap_ready                   FAIL sent=288 received=288 gaps=238 errors=149
-    wrong positions per window index 0..8: 0 7 68 / 0 5 88 / 88 0 88
-5 random_gap_random_ready            FAIL sent=288 received=288 gaps=235 errors=156
-    wrong positions per window index 0..8: 0 8 76 / 0 7 90 / 90 0 90
+2 one_gap_mid_line                   PASS sent=288 received=288 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=288 received=288 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=288 received=288 gaps=238 errors=0
+5 random_gap_random_ready            PASS sent=288 received=288 gaps=235 errors=0
 6 cont_valid_after_gap               PASS sent=288 received=288 gaps=0 errors=0
+[matrix_gap0]
+0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
+2 one_gap_mid_line                   PASS sent=144 received=144 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=144 received=144 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=144 received=144 gaps=105 errors=0
+5 random_gap_random_ready            PASS sent=144 received=144 gaps=112 errors=0
+6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
+[matrix_gap1]
+0 cont_valid_ready                   PASS sent=144 received=144 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=144 received=144 gaps=0 errors=0
+2 one_gap_mid_line                   PASS sent=144 received=144 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=144 received=144 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=144 received=144 gaps=93 errors=0
+5 random_gap_random_ready            PASS sent=144 received=144 gaps=100 errors=0
+6 cont_valid_after_gap               PASS sent=144 received=144 gaps=0 errors=0
+[matrix_h2]
+0 cont_valid_ready                   PASS sent=48 received=48 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=48 received=48 gaps=0 errors=0
+2 one_gap_mid_line                   PASS sent=48 received=48 gaps=6 errors=0
+3 one_gap_before_last_beat           PASS sent=48 received=48 gaps=6 errors=0
+4 random_gap_ready                   PASS sent=48 received=48 gaps=36 errors=0
+5 random_gap_random_ready            PASS sent=48 received=48 gaps=39 errors=0
+6 cont_valid_after_gap               PASS sent=48 received=48 gaps=0 errors=0
+[matrix_h1]
+0 cont_valid_ready                   PASS sent=24 received=24 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=24 received=24 gaps=0 errors=0
+2 one_gap_mid_line                   PASS sent=24 received=24 gaps=3 errors=0
+3 one_gap_before_last_beat           PASS sent=24 received=24 gaps=3 errors=0
+4 random_gap_ready                   PASS sent=24 received=24 gaps=11 errors=0
+5 random_gap_random_ready            PASS sent=24 received=24 gaps=18 errors=0
+6 cont_valid_after_gap               PASS sent=24 received=24 gaps=0 errors=0
+[matrix_full]
+0 cont_valid_ready                   PASS sent=576 received=576 gaps=0 errors=0
+1 cont_valid_random_ready            PASS sent=576 received=576 gaps=0 errors=0
+2 one_gap_mid_line                   PASS sent=576 received=576 gaps=18 errors=0
+3 one_gap_before_last_beat           PASS sent=576 received=576 gaps=18 errors=0
+4 random_gap_ready                   PASS sent=576 received=576 gaps=434 errors=0
+5 random_gap_random_ready            PASS sent=576 received=576 gaps=451 errors=0
+6 cont_valid_after_gap               PASS sent=576 received=576 gaps=0 errors=0
 
 Run         Top               Cases Expected Result
 ---         ---               ----- -------- ------
-matrix_tap8 tb_matrix_3x3_gen     3        7 FAIL  
-matrix_tap4 tb_matrix_3x3_gen     3        7 FAIL  
-matrix_tap2 tb_matrix_3x3_gen     3        7 FAIL  
-matrix_tap1 tb_matrix_3x3_gen     3        7 FAIL  
+matrix_tap8 tb_matrix_3x3_gen     7        7 PASS  
+matrix_tap4 tb_matrix_3x3_gen     7        7 PASS  
+matrix_tap2 tb_matrix_3x3_gen     7        7 PASS  
+matrix_tap1 tb_matrix_3x3_gen     7        7 PASS  
+matrix_gap0 tb_matrix_3x3_gen     7        7 PASS  
+matrix_gap1 tb_matrix_3x3_gen     7        7 PASS  
+matrix_h2   tb_matrix_3x3_gen     7        7 PASS  
+matrix_h1   tb_matrix_3x3_gen     7        7 PASS  
+matrix_full tb_matrix_3x3_gen     7        7 PASS  
 
 
-TESTS FAILED: 4 of 4 runs.
+ALL TESTS PASSED: 9 runs.
 
